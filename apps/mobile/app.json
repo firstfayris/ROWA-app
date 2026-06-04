@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "ROWA",
+    "slug": "rowa-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#4B5DB8"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.rowa.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#4B5DB8"
+      },
+      "package": "com.rowa.app"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "scheme": "rowa"
+  }
+}

@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+
+# Environment files (NEVER commit these)
+.env
+.env.local
+.env.production
+.env*.local
+
+# Expo / React Native
+.expo/
+ios/
+android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Supabase local
+supabase/.temp/
+supabase/functions/.venv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+
+# Turbo
+.turbo/
+
+# Vercel
+.vercel
