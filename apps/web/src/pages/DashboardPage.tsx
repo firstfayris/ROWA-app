@@ -214,7 +214,7 @@ export function DashboardPage() {
                   </Pie>
                   <Tooltip formatter={(v: number) => formatCurrency(v)} />
                   <Legend
-                    formatter={value => ({ lazada: 'Lazada', shopee: 'Shopee', store: 'หน้าร้าน' }[value] ?? value)}
+                    formatter={value => ({ lazada: 'Lazada', shopee: 'Shopee', store: 'หน้าร้าน' }[value as string] ?? value)}
                   />
                 </PieChart>
               </ResponsiveContainer>
