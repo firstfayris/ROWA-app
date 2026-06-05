@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/Badge'
 import { supabase } from '@/lib/supabase'
 import { formatCurrency } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
-import type { Platform } from '@rowa/core'
+import type { Platform } from '../lib/types'
 
 const PLATFORM_COLORS: Record<Platform, string> = {
   lazada: '#F97316',

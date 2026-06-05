@@ -9,7 +9,7 @@ import { StatCard } from '@/components/ui/StatCard'
 import { supabase } from '@/lib/supabase'
 import { formatCurrency } from '@/lib/utils'
 import { TrendingUp, TrendingDown, DollarSign } from 'lucide-react'
-import type { Platform } from '@rowa/core'
+import type { Platform } from '../lib/types'
 
 interface PlatformRow {
   platform: Platform

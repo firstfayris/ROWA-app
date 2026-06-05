@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@rowa/core": "workspace:*",
     "@supabase/supabase-js": "^2.46.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { User, Session } from '@supabase/supabase-js'
-import type { Profile } from '@rowa/core'
+import type { Profile } from '../lib/types'
 import { supabase } from '@/lib/supabase'
 
 interface AuthState {

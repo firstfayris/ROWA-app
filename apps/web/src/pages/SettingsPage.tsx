@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { RefreshCw, Link2, Users, Tag } from 'lucide-react'
 import toast from 'react-hot-toast'
-import type { Platform } from '@rowa/core'
+import type { Platform } from '../lib/types'
 
 interface PlatformCred {
   id?: string
