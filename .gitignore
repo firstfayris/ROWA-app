@@ -48,4 +48,3 @@ pnpm-debug.log*
 
 # Vercel
 .vercel
-pnpm-lock.yaml
