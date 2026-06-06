@@ -3,9 +3,17 @@ import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
-import { RefreshCw, Link2, Users, Tag } from 'lucide-react'
+import { RefreshCw, Link2, Users, Tag, Plus, Pencil, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import type { Platform } from '../lib/types'
+
+interface Category {
+  id: string
+  name: string
+  brand: string
+  color: string
+  description: string | null
+}
 
 interface PlatformCred {
   id?: string
@@ -40,7 +48,7 @@ const platformLabelTh: Record<Platform, string> = {
 }
 
 export function SettingsPage() {
-  const [tab, setTab] = useState<'platforms' | 'users' | 'pricing'>('platforms')
+  const [tab, setTab] = useState<'platforms' | 'users' | 'pricing' | 'categories'>('platforms')
 
   // Platform credentials
   const [creds, setCreds] = useState<Record<Platform, PlatformCred>>({
@@ -59,11 +67,19 @@ export function SettingsPage() {
   // Pricing
   const [pricingRows, setPricingRows] = useState<ProductPlatformRow[]>([])
 
+  // Categories
+  const [categories, setCategories] = useState<Category[]>([])
+  const [showCatForm, setShowCatForm] = useState(false)
+  const [editCatId, setEditCatId] = useState<string | null>(null)
+  const [catForm, setCatForm] = useState({ name: '', brand: 'ROWA', color: '#4B5DB8', description: '' })
+  const [savingCat, setSavingCat] = useState(false)
+
   const fetchAll = async () => {
-    const [credsRes, usersRes, pricingRes] = await Promise.all([
+    const [credsRes, usersRes, pricingRes, catsRes] = await Promise.all([
       supabase.from('platform_credentials').select('*'),
       supabase.from('profiles').select('*').order('created_at'),
       supabase.from('product_platforms').select('*, product:products(name,sku)').order('platform'),
+      supabase.from('categories').select('*').order('brand,name'),
     ])
     if (credsRes.data) {
       for (const c of credsRes.data) {
@@ -72,6 +88,7 @@ export function SettingsPage() {
     }
     setUsers(usersRes.data ?? [])
     setPricingRows(pricingRes.data ?? [])
+    setCategories(catsRes.data ?? [])
   }
 
   useEffect(() => { fetchAll() }, [])
@@ -113,8 +130,28 @@ export function SettingsPage() {
     else toast.success('อัปเดตราคาแล้ว')
   }
 
+  const saveCategory = async () => {
+    if (!catForm.name || !catForm.brand) return toast.error('กรุณาใส่ชื่อและแบรนด์')
+    setSavingCat(true)
+    const payload = { name: catForm.name, brand: catForm.brand, color: catForm.color, description: catForm.description || null }
+    const { error } = editCatId
+      ? await supabase.from('categories').update(payload).eq('id', editCatId)
+      : await supabase.from('categories').insert(payload)
+    if (error) { toast.error(error.message); setSavingCat(false); return }
+    toast.success(editCatId ? 'แก้ไขหมวดหมู่แล้ว' : 'เพิ่มหมวดหมู่แล้ว')
+    setShowCatForm(false); fetchAll(); setSavingCat(false)
+  }
+
+  const deleteCategory = async (id: string) => {
+    if (!confirm('ต้องการลบหมวดหมู่นี้?')) return
+    const { error } = await supabase.from('categories').delete().eq('id', id)
+    if (error) { toast.error(error.message); return }
+    toast.success('ลบหมวดหมู่แล้ว'); fetchAll()
+  }
+
   const tabs = [
     { key: 'platforms', label: 'เชื่อมต่อ Platform', icon: Link2 },
+    { key: 'categories', label: 'หมวดหมู่', icon: Tag },
     { key: 'pricing', label: 'ราคา & ส่วนลด', icon: Tag },
     { key: 'users', label: 'จัดการผู้ใช้', icon: Users },
   ] as const
@@ -286,6 +323,75 @@ export function SettingsPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Categories */}
+      {tab === 'categories' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-rowa-text">หมวดหมู่สินค้า</h2>
+            <Button size="sm" onClick={() => { setEditCatId(null); setCatForm({ name: '', brand: 'ROWA', color: '#4B5DB8', description: '' }); setShowCatForm(true) }}>
+              <Plus className="h-4 w-4" /> เพิ่มหมวดหมู่
+            </Button>
+          </div>
+
+          {showCatForm && (
+            <div className="card border-rowa-blue/30 border space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium">{editCatId ? 'แก้ไขหมวดหมู่' : 'เพิ่มหมวดหมู่ใหม่'}</h3>
+                <button onClick={() => setShowCatForm(false)}><X className="h-4 w-4 text-gray-400" /></button>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Input label="ชื่อหมวดหมู่" value={catForm.name} onChange={e => setCatForm(f => ({ ...f, name: e.target.value }))} placeholder="เช่น กระเป๋า eye theme" />
+                <Input label="แบรนด์" value={catForm.brand} onChange={e => setCatForm(f => ({ ...f, brand: e.target.value }))} placeholder="เช่น ROWA" />
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700">สี</label>
+                  <div className="flex items-center gap-2">
+                    <input type="color" value={catForm.color} onChange={e => setCatForm(f => ({ ...f, color: e.target.value }))} className="h-9 w-12 rounded border border-gray-200 cursor-pointer" />
+                    <span className="text-sm text-rowa-muted">{catForm.color}</span>
+                  </div>
+                </div>
+                <Input label="คำอธิบาย (ไม่บังคับ)" value={catForm.description} onChange={e => setCatForm(f => ({ ...f, description: e.target.value }))} placeholder="รายละเอียดเพิ่มเติม" />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="secondary" size="sm" onClick={() => setShowCatForm(false)}>ยกเลิก</Button>
+                <Button size="sm" loading={savingCat} onClick={saveCategory}>บันทึก</Button>
+              </div>
+            </div>
+          )}
+
+          {(() => {
+            const brands = [...new Set(categories.map(c => c.brand))]
+            return brands.map(brand => (
+              <div key={brand} className="card space-y-2">
+                <h3 className="font-medium text-rowa-text text-sm uppercase tracking-wide text-rowa-muted">{brand}</h3>
+                {categories.filter(c => c.brand === brand).map(cat => (
+                  <div key={cat.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+                    <div className="h-4 w-4 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-rowa-text">{cat.name}</p>
+                      {cat.description && <p className="text-xs text-rowa-muted">{cat.description}</p>}
+                    </div>
+                    <div className="flex gap-1">
+                      <button className="p-1.5 rounded hover:bg-gray-100" onClick={() => { setEditCatId(cat.id); setCatForm({ name: cat.name, brand: cat.brand, color: cat.color, description: cat.description ?? '' }); setShowCatForm(true) }}>
+                        <Pencil className="h-3.5 w-3.5 text-gray-400" />
+                      </button>
+                      <button className="p-1.5 rounded hover:bg-red-50" onClick={() => deleteCategory(cat.id)}>
+                        <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))
+          })()}
+
+          {categories.length === 0 && (
+            <div className="card text-center text-rowa-muted text-sm py-8">ยังไม่มีหมวดหมู่ กดปุ่ม "เพิ่มหมวดหมู่" เพื่อเริ่มต้น</div>
+          )}
         </div>
       )}
 
