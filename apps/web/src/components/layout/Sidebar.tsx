@@ -12,7 +12,7 @@ const navItems = [
   { to: '/products', icon: Package, label: 'สินค้า & สต็อก' },
   { to: '/orders', icon: ShoppingCart, label: 'คำสั่งซื้อ' },
   { to: '/reports', icon: BarChart3, label: 'รายงาน', adminOnly: true },
-  { to: '/marketing', icon: Megaphone, label: 'ค่าการตลาด', adminOnly: true },
+  { to: '/marketing', icon: Megaphone, label: 'ค่าใช้จ่าย', adminOnly: true },
   { to: '/settings', icon: Settings, label: 'ตั้งค่า', adminOnly: true },
 ]
 
