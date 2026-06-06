@@ -55,6 +55,8 @@ export function OrdersPage() {
   const [platformFilter, setPlatformFilter] = useState<Platform | 'all'>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [showSaleModal, setShowSaleModal] = useState(false)
+  const [salePlatform, setSalePlatform] = useState<Platform>('store')
+  const [saleOrderId, setSaleOrderId] = useState('')
   const [saleItems, setSaleItems] = useState<SaleItem[]>([{ product_id: '', product_name: '', quantity: 1, unit_price: 0, cost_price: 0 }])
   const [products, setProducts] = useState<{ id: string; name: string; cost_price: number }[]>([])
   const [saving, setSaving] = useState(false)
@@ -91,7 +93,12 @@ export function OrdersPage() {
     const total = validItems.reduce((s, i) => s + i.quantity * i.unit_price, 0)
     const { data: order, error } = await supabase
       .from('orders')
-      .insert({ platform: 'store', status: 'delivered', total_amount: total })
+      .insert({
+        platform: salePlatform,
+        platform_order_id: saleOrderId || null,
+        status: 'delivered',
+        total_amount: total,
+      })
       .select()
       .single()
     if (error) { toast.error(error.message); setSaving(false); return }
@@ -113,13 +120,15 @@ export function OrdersPage() {
         product_id: i.product_id,
         type: 'out',
         quantity: i.quantity,
-        note: `ขายหน้าร้าน #${order.id.slice(0, 8)}`,
+        note: `ขาย${platformLabel[salePlatform]} #${saleOrderId || order.id.slice(0, 8)}`,
         created_by: profile!.id,
       })
     ))
 
     toast.success('บันทึกการขายแล้ว')
     setShowSaleModal(false)
+    setSalePlatform('store')
+    setSaleOrderId('')
     setSaleItems([{ product_id: '', product_name: '', quantity: 1, unit_price: 0, cost_price: 0 }])
     fetchOrders()
     setSaving(false)
@@ -146,7 +155,7 @@ export function OrdersPage() {
           <p className="text-rowa-muted text-sm">{orders.length} รายการ</p>
         </div>
         <Button onClick={() => setShowSaleModal(true)}>
-          <Plus className="h-4 w-4" /> บันทึกขายหน้าร้าน
+          <Plus className="h-4 w-4" /> บันทึกการขาย
         </Button>
       </div>
 
@@ -246,7 +255,29 @@ export function OrdersPage() {
       {showSaleModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold mb-4">บันทึกขายหน้าร้าน</h2>
+            <h2 className="text-lg font-bold mb-4">บันทึกการขาย</h2>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-gray-700">Platform</label>
+                <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+                  {(['store', 'lazada', 'shopee'] as Platform[]).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setSalePlatform(p)}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${salePlatform === p ? 'bg-white text-rowa-blue shadow-sm' : 'text-gray-500'}`}
+                    >
+                      {platformLabel[p]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <Input
+                label={`เลข Order ID ${salePlatform !== 'store' ? '' : '(ไม่บังคับ)'}`}
+                placeholder={salePlatform === 'lazada' ? '123456789' : salePlatform === 'shopee' ? '2412345678' : '-'}
+                value={saleOrderId}
+                onChange={e => setSaleOrderId(e.target.value)}
+              />
+            </div>
             <div className="space-y-3">
               {saleItems.map((item, i) => (
                 <div key={i} className="border border-gray-100 rounded-xl p-3 space-y-2">
