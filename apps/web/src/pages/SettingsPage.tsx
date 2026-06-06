@@ -7,6 +7,11 @@ import { RefreshCw, Link2, Users, Tag, Plus, Pencil, Trash2, X } from 'lucide-re
 import toast from 'react-hot-toast'
 import type { Platform } from '../lib/types'
 
+interface Brand {
+  id: string
+  name: string
+}
+
 interface Category {
   id: string
   name: string
@@ -67,19 +72,25 @@ export function SettingsPage() {
   // Pricing
   const [pricingRows, setPricingRows] = useState<ProductPlatformRow[]>([])
 
+  // Brands
+  const [brands, setBrands] = useState<Brand[]>([])
+  const [newBrandName, setNewBrandName] = useState('')
+  const [savingBrand, setSavingBrand] = useState(false)
+
   // Categories
   const [categories, setCategories] = useState<Category[]>([])
   const [showCatForm, setShowCatForm] = useState(false)
   const [editCatId, setEditCatId] = useState<string | null>(null)
-  const [catForm, setCatForm] = useState({ name: '', brand: 'ROWA', color: '#4B5DB8', description: '' })
+  const [catForm, setCatForm] = useState({ name: '', brand: '', color: '#4B5DB8', description: '' })
   const [savingCat, setSavingCat] = useState(false)
 
   const fetchAll = async () => {
-    const [credsRes, usersRes, pricingRes, catsRes] = await Promise.all([
+    const [credsRes, usersRes, pricingRes, catsRes, brandsRes] = await Promise.all([
       supabase.from('platform_credentials').select('*'),
       supabase.from('profiles').select('*').order('created_at'),
       supabase.from('product_platforms').select('*, product:products(name,sku)').order('platform'),
       supabase.from('categories').select('*').order('brand,name'),
+      supabase.from('brands').select('*').order('name'),
     ])
     if (credsRes.data) {
       for (const c of credsRes.data) {
@@ -89,6 +100,7 @@ export function SettingsPage() {
     setUsers(usersRes.data ?? [])
     setPricingRows(pricingRes.data ?? [])
     setCategories(catsRes.data ?? [])
+    setBrands(brandsRes.data ?? [])
   }
 
   useEffect(() => { fetchAll() }, [])
@@ -128,6 +140,25 @@ export function SettingsPage() {
     }).eq('id', row.id)
     if (error) toast.error(error.message)
     else toast.success('อัปเดตราคาแล้ว')
+  }
+
+  const saveBrand = async () => {
+    if (!newBrandName.trim()) return
+    setSavingBrand(true)
+    const { error } = await supabase.from('brands').insert({ name: newBrandName.trim() })
+    if (error) toast.error(error.message)
+    else { toast.success('เพิ่มแบรนด์แล้ว'); setNewBrandName(''); fetchAll() }
+    setSavingBrand(false)
+  }
+
+  const deleteBrand = async (id: string, name: string) => {
+    if (categories.some(c => c.brand === name)) {
+      return toast.error('ไม่สามารถลบแบรนด์ที่มีหมวดหมู่อยู่ได้')
+    }
+    if (!confirm(`ลบแบรนด์ "${name}"?`)) return
+    const { error } = await supabase.from('brands').delete().eq('id', id)
+    if (error) toast.error(error.message)
+    else { toast.success('ลบแบรนด์แล้ว'); fetchAll() }
   }
 
   const saveCategory = async () => {
@@ -329,9 +360,36 @@ export function SettingsPage() {
       {/* Categories */}
       {tab === 'categories' && (
         <div className="space-y-4">
+          {/* Brand management */}
+          <div className="card space-y-3">
+            <h2 className="font-semibold text-rowa-text">แบรนด์</h2>
+            <div className="flex flex-wrap gap-2">
+              {brands.map(b => (
+                <div key={b.id} className="flex items-center gap-1 bg-gray-100 rounded-full px-3 py-1 text-sm">
+                  <span>{b.name}</span>
+                  <button onClick={() => deleteBrand(b.id, b.name)} className="ml-1 text-gray-400 hover:text-red-400">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 items-center">
+              <input
+                className="input flex-1"
+                placeholder="ชื่อแบรนด์ใหม่ เช่น เฟอร์นิเจอร์"
+                value={newBrandName}
+                onChange={e => setNewBrandName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && saveBrand()}
+              />
+              <Button size="sm" loading={savingBrand} onClick={saveBrand}>
+                <Plus className="h-4 w-4" /> เพิ่มแบรนด์
+              </Button>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-rowa-text">หมวดหมู่สินค้า</h2>
-            <Button size="sm" onClick={() => { setEditCatId(null); setCatForm({ name: '', brand: 'ROWA', color: '#4B5DB8', description: '' }); setShowCatForm(true) }}>
+            <Button size="sm" onClick={() => { setEditCatId(null); setCatForm({ name: '', brand: brands[0]?.name ?? '', color: '#4B5DB8', description: '' }); setShowCatForm(true) }}>
               <Plus className="h-4 w-4" /> เพิ่มหมวดหมู่
             </Button>
           </div>
@@ -344,7 +402,12 @@ export function SettingsPage() {
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
                 <Input label="ชื่อหมวดหมู่" value={catForm.name} onChange={e => setCatForm(f => ({ ...f, name: e.target.value }))} placeholder="เช่น กระเป๋า eye theme" />
-                <Input label="แบรนด์" value={catForm.brand} onChange={e => setCatForm(f => ({ ...f, brand: e.target.value }))} placeholder="เช่น ROWA" />
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700">แบรนด์</label>
+                  <select className="input" value={catForm.brand} onChange={e => setCatForm(f => ({ ...f, brand: e.target.value }))}>
+                    {brands.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                  </select>
+                </div>
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
