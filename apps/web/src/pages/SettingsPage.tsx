@@ -66,6 +66,8 @@ export function SettingsPage() {
   // Users
   const [users, setUsers] = useState<ProfileRow[]>([])
   const [inviteEmail, setInviteEmail] = useState('')
+  const [invitePassword, setInvitePassword] = useState('')
+  const [inviteName, setInviteName] = useState('')
   const [inviteRole, setInviteRole] = useState<'staff' | 'admin'>('staff')
   const [inviting, setInviting] = useState(false)
 
@@ -122,13 +124,24 @@ export function SettingsPage() {
   }
 
   const inviteUser = async () => {
-    if (!inviteEmail) return
+    if (!inviteEmail || !invitePassword) return toast.error('กรุณาใส่อีเมลและรหัสผ่าน')
+    if (invitePassword.length < 6) return toast.error('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร')
     setInviting(true)
-    const { error } = await supabase.auth.admin.inviteUserByEmail(inviteEmail, {
-      data: { role: inviteRole },
+    const { data, error } = await supabase.auth.signUp({
+      email: inviteEmail,
+      password: invitePassword,
     })
-    if (error) toast.error(error.message)
-    else { toast.success('ส่งอีเมลเชิญแล้ว'); setInviteEmail('') }
+    if (error) { toast.error(error.message); setInviting(false); return }
+    if (data.user) {
+      await supabase.from('profiles').upsert({
+        id: data.user.id,
+        full_name: inviteName || inviteEmail.split('@')[0],
+        role: inviteRole,
+      })
+    }
+    toast.success('เพิ่มผู้ใช้แล้ว')
+    setInviteEmail(''); setInvitePassword(''); setInviteName('')
+    fetchAll()
     setInviting(false)
   }
 
@@ -299,17 +312,21 @@ export function SettingsPage() {
       {tab === 'users' && (
         <div className="space-y-4">
           <div className="card">
-            <h2 className="font-semibold mb-4">เชิญผู้ใช้ใหม่</h2>
-            <div className="flex gap-3 flex-wrap items-end">
-              <Input label="อีเมล" type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="staff@example.com" className="w-64" />
+            <h2 className="font-semibold mb-4">เพิ่มผู้ใช้ใหม่</h2>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+              <Input label="ชื่อ" value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="ชื่อผู้ใช้" />
+              <Input label="อีเมล" type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="staff@example.com" />
+              <Input label="รหัสผ่าน" type="password" value={invitePassword} onChange={e => setInvitePassword(e.target.value)} placeholder="อย่างน้อย 6 ตัวอักษร" />
               <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-gray-700">Role</label>
+                <label className="text-sm font-medium text-gray-700">สิทธิ์</label>
                 <select className="input" value={inviteRole} onChange={e => setInviteRole(e.target.value as 'staff' | 'admin')}>
                   <option value="staff">พนักงาน (Staff)</option>
                   <option value="admin">ผู้ดูแล (Admin)</option>
                 </select>
               </div>
-              <Button onClick={inviteUser} loading={inviting}>ส่งคำเชิญ</Button>
+            </div>
+            <div className="mt-3">
+              <Button onClick={inviteUser} loading={inviting}>เพิ่มผู้ใช้</Button>
             </div>
           </div>
 
