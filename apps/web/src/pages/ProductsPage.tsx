@@ -331,15 +331,15 @@ export function ProductsPage() {
             <Package className="h-10 w-10 opacity-30" /><p>ไม่พบสินค้า</p>
           </div>
         ) : (
-          <table className="w-full min-w-[640px]">
+          <table className="w-full" style={{ minWidth: 750 }}>
             <thead>
               <tr className="border-b border-gray-100 bg-rowa-bg/50">
-                <th className="text-left text-xs font-medium text-rowa-muted px-6 py-3">สินค้า</th>
-                <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">หมวดหมู่</th>
-                <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">SKU</th>
-                {canViewCost && <th className="text-right text-xs font-medium text-rowa-muted px-4 py-3" style={{ minWidth: 90 }}>ต้นทุน</th>}
-                <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3 whitespace-nowrap" style={{ minWidth: 110 }}>สต็อก</th>
-                <th className="text-right text-xs font-medium text-rowa-muted px-6 py-3 whitespace-nowrap" style={{ minWidth: 130 }}>จัดการ</th>
+                <th className="text-left text-xs font-medium text-rowa-muted px-6 py-3" style={{ whiteSpace: 'nowrap' }}>สินค้า</th>
+                <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap' }}>หมวดหมู่</th>
+                <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap' }}>SKU</th>
+                {canViewCost && <th className="text-right text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap', minWidth: 90 }}>ต้นทุน</th>}
+                <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap', minWidth: 110 }}>สต็อก</th>
+                <th className="text-right text-xs font-medium text-rowa-muted px-6 py-3" style={{ whiteSpace: 'nowrap', minWidth: 130 }}>จัดการ</th>
               </tr>
             </thead>
             <tbody>
@@ -377,7 +377,7 @@ export function ProductsPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-rowa-muted">{product.sku}</td>
                     {canViewCost && <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(product.cost_price)}</td>}
-                    <td className="px-4 py-3 text-center" style={{ minWidth: 110 }}>
+                    <td className="px-4 py-3 text-center" style={{ minWidth: 110, whiteSpace: 'nowrap' }}>
                       <Badge variant={product.current_stock === 0 ? 'danger' : product.current_stock <= 5 ? 'warning' : 'success'}>
                         {product.current_stock === 0 ? 'หมดสต็อก' : `${product.current_stock} ชิ้น`}
                       </Badge>
