@@ -1,0 +1,443 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
+import { Input } from '@/components/ui/Input'
+import { useAuthStore } from '@/store/authStore'
+import { Printer, Plus, CheckCircle, ClipboardList, ChevronDown, ChevronUp } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { formatCurrency } from '@/lib/utils'
+
+interface AuditItem {
+  id?: string
+  product_id: string
+  product_name: string
+  product_sku: string
+  product_brand: string
+  product_category: string
+  system_qty: number
+  actual_qty: string
+  note: string
+}
+
+interface Audit {
+  id: string
+  status: string
+  note: string | null
+  created_at: string
+  submitted_at: string | null
+  reviewed_at: string | null
+  created_by_name?: string
+  items?: AuditItem[]
+}
+
+const statusLabel: Record<string, string> = {
+  draft: 'ร่าง',
+  submitted: 'รอตรวจสอบ',
+  reviewed: 'ตรวจแล้ว',
+}
+const statusVariant: Record<string, 'default' | 'warning' | 'success'> = {
+  draft: 'default',
+  submitted: 'warning',
+  reviewed: 'success',
+}
+
+export function StockAuditPage() {
+  const { profile } = useAuthStore()
+  const isAdmin = profile?.role === 'admin'
+
+  const [view, setView] = useState<'list' | 'new' | 'detail'>('list')
+  const [audits, setAudits] = useState<Audit[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  // New audit
+  const [auditItems, setAuditItems] = useState<AuditItem[]>([])
+  const [auditNote, setAuditNote] = useState('')
+
+  // Detail view
+  const [selectedAudit, setSelectedAudit] = useState<Audit | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  const fetchAudits = async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('stock_audits')
+      .select('*')
+      .order('created_at', { ascending: false })
+    setAudits(data ?? [])
+    setLoading(false)
+  }
+
+  const loadProducts = async () => {
+    const { data: prods } = await supabase
+      .from('product_stock')
+      .select('id, name, sku, current_stock, category_id')
+      .order('name')
+    const { data: cats } = await supabase
+      .from('categories')
+      .select('id, name, brand')
+
+    const items: AuditItem[] = (prods ?? []).map(p => {
+      const cat = cats?.find(c => c.id === p.category_id)
+      return {
+        product_id: p.id,
+        product_name: p.name,
+        product_sku: p.sku,
+        product_brand: cat?.brand ?? '—',
+        product_category: cat?.name ?? '—',
+        system_qty: p.current_stock,
+        actual_qty: '',
+        note: '',
+      }
+    })
+    setAuditItems(items)
+  }
+
+  useEffect(() => { fetchAudits() }, [])
+
+  const startNewAudit = async () => {
+    await loadProducts()
+    setAuditNote('')
+    setView('new')
+  }
+
+  const saveAudit = async (submitNow: boolean) => {
+    setSaving(true)
+    const { data: audit, error } = await supabase
+      .from('stock_audits')
+      .insert({
+        status: submitNow ? 'submitted' : 'draft',
+        note: auditNote || null,
+        created_by: profile?.id,
+        submitted_at: submitNow ? new Date().toISOString() : null,
+      })
+      .select().single()
+
+    if (error) { toast.error(error.message); setSaving(false); return }
+
+    const itemsToSave = auditItems.map(i => ({
+      audit_id: audit.id,
+      product_id: i.product_id,
+      system_qty: i.system_qty,
+      actual_qty: i.actual_qty !== '' ? parseInt(i.actual_qty) : null,
+      note: i.note || null,
+    }))
+
+    const { error: itemsErr } = await supabase.from('stock_audit_items').insert(itemsToSave)
+    if (itemsErr) { toast.error(itemsErr.message); setSaving(false); return }
+
+    toast.success(submitNow ? 'ส่งผลนับแล้ว' : 'บันทึกร่างแล้ว')
+    fetchAudits()
+    setView('list')
+    setSaving(false)
+  }
+
+  const loadAuditDetail = async (audit: Audit) => {
+    const { data: items } = await supabase
+      .from('stock_audit_items')
+      .select('*, product:products(name, sku)')
+      .eq('audit_id', audit.id)
+
+    const { data: cats } = await supabase.from('categories').select('id, name, brand')
+    const { data: prods } = await supabase.from('product_stock').select('id, category_id')
+
+    const mapped: AuditItem[] = (items ?? []).map((i: any) => {
+      const prod = prods?.find(p => p.id === i.product_id)
+      const cat = cats?.find(c => c.id === prod?.category_id)
+      return {
+        id: i.id,
+        product_id: i.product_id,
+        product_name: i.product?.name ?? '—',
+        product_sku: i.product?.sku ?? '—',
+        product_brand: cat?.brand ?? '—',
+        product_category: cat?.name ?? '—',
+        system_qty: i.system_qty,
+        actual_qty: i.actual_qty?.toString() ?? '—',
+        note: i.note ?? '',
+      }
+    })
+    setSelectedAudit({ ...audit, items: mapped })
+    setView('detail')
+  }
+
+  const markReviewed = async (id: string) => {
+    await supabase.from('stock_audits').update({ status: 'reviewed', reviewed_at: new Date().toISOString() }).eq('id', id)
+    toast.success('ทำเครื่องหมายตรวจแล้ว')
+    fetchAudits()
+    setView('list')
+  }
+
+  const printAudit = () => window.print()
+
+  const diffItems = selectedAudit?.items?.filter(i => i.actual_qty !== '—' && parseInt(i.actual_qty) !== i.system_qty) ?? []
+
+  // ---- PRINT STYLES ----
+  return (
+    <>
+      <style>{`
+        @media print {
+          body > *:not(#print-root) { display: none !important; }
+          #print-root { display: block !important; }
+          .no-print { display: none !important; }
+          .print-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          .print-table th, .print-table td { border: 1px solid #ccc; padding: 6px 8px; }
+          .print-table th { background: #f3f4f6; font-weight: 600; }
+        }
+      `}</style>
+
+      <div className="space-y-6 no-print">
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-rowa-text">ตรวจนับสต็อก</h1>
+            <p className="text-rowa-muted text-sm">ออกใบนับสต็อก ส่งผล และเปรียบเทียบกับระบบ</p>
+          </div>
+          <div className="flex gap-2">
+            {view !== 'list' && <Button variant="secondary" onClick={() => setView('list')}>← กลับ</Button>}
+            {view === 'list' && (
+              <Button onClick={startNewAudit}>
+                <Plus className="h-4 w-4" /> สร้างใบนับสต็อก
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* LIST VIEW */}
+        {view === 'list' && (
+          <div className="card p-0 overflow-hidden">
+            {loading ? (
+              <div className="py-16 text-center text-rowa-muted">กำลังโหลด...</div>
+            ) : audits.length === 0 ? (
+              <div className="flex flex-col items-center py-16 gap-2 text-rowa-muted">
+                <ClipboardList className="h-10 w-10 opacity-30" />
+                <p>ยังไม่มีใบนับสต็อก</p>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-rowa-bg/50 border-b border-gray-100">
+                    <th className="text-left text-xs font-medium text-rowa-muted px-6 py-3">วันที่สร้าง</th>
+                    <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">สถานะ</th>
+                    <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">หมายเหตุ</th>
+                    <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">ส่งเมื่อ</th>
+                    <th className="px-6 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {audits.map(a => (
+                    <tr key={a.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                      <td className="px-6 py-3 text-sm text-rowa-muted whitespace-nowrap">
+                        {new Date(a.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant={statusVariant[a.status]}>{statusLabel[a.status]}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-rowa-muted">{a.note ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm text-rowa-muted">
+                        {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                      </td>
+                      <td className="px-6 py-3">
+                        <Button size="sm" variant="secondary" onClick={() => loadAuditDetail(a)}>ดูรายละเอียด</Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {/* NEW AUDIT VIEW */}
+        {view === 'new' && (
+          <div className="space-y-4">
+            <div className="card flex flex-wrap gap-4 items-end justify-between">
+              <Input label="หมายเหตุ (ไม่บังคับ)" value={auditNote} onChange={e => setAuditNote(e.target.value)} placeholder="เช่น นับสต็อกประจำเดือน มิ.ย." className="w-72" />
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={printAudit}><Printer className="h-4 w-4" /> ปริ้นใบนับ</Button>
+                <Button variant="secondary" loading={saving} onClick={() => saveAudit(false)}>บันทึกร่าง</Button>
+                <Button loading={saving} onClick={() => saveAudit(true)}><CheckCircle className="h-4 w-4" /> ส่งผลนับ</Button>
+              </div>
+            </div>
+
+            <div className="card p-0 overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-rowa-bg/50 border-b border-gray-100">
+                    <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3 w-8">#</th>
+                    <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">สินค้า</th>
+                    <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">แบรนด์ / หมวดหมู่</th>
+                    <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">SKU</th>
+                    <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3">สต็อกในระบบ</th>
+                    <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3">จำนวนที่นับได้</th>
+                    <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">หมายเหตุ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditItems.map((item, i) => (
+                    <tr key={item.product_id} className="border-b border-gray-50">
+                      <td className="px-4 py-2 text-xs text-gray-400">{i + 1}</td>
+                      <td className="px-4 py-2 text-sm font-medium">{item.product_name}</td>
+                      <td className="px-4 py-2 text-xs text-rowa-muted">{item.product_brand} · {item.product_category}</td>
+                      <td className="px-4 py-2 text-xs font-mono text-rowa-muted">{item.product_sku}</td>
+                      <td className="px-4 py-2 text-center">
+                        <Badge variant={item.system_qty === 0 ? 'danger' : item.system_qty <= 5 ? 'warning' : 'success'}>
+                          {item.system_qty}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-2">
+                        <input type="number" min="0" placeholder="—"
+                          value={item.actual_qty}
+                          onChange={e => setAuditItems(items => items.map((it, j) => j === i ? { ...it, actual_qty: e.target.value } : it))}
+                          className="input text-center w-20 mx-auto block" />
+                      </td>
+                      <td className="px-4 py-2">
+                        <input type="text" placeholder="หมายเหตุ"
+                          value={item.note}
+                          onChange={e => setAuditItems(items => items.map((it, j) => j === i ? { ...it, note: e.target.value } : it))}
+                          className="input text-sm w-36" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* DETAIL VIEW */}
+        {view === 'detail' && selectedAudit && (
+          <div className="space-y-4">
+            <div className="card flex flex-wrap gap-4 items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Badge variant={statusVariant[selectedAudit.status]}>{statusLabel[selectedAudit.status]}</Badge>
+                <span className="text-sm text-rowa-muted">
+                  สร้าง {new Date(selectedAudit.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </span>
+                {selectedAudit.note && <span className="text-sm text-rowa-muted">· {selectedAudit.note}</span>}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={printAudit}><Printer className="h-4 w-4" /> ปริ้น</Button>
+                {isAdmin && selectedAudit.status === 'submitted' && (
+                  <Button onClick={() => markReviewed(selectedAudit.id)}>
+                    <CheckCircle className="h-4 w-4" /> ยืนยันตรวจแล้ว
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Diff summary */}
+            {diffItems.length > 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3">
+                <p className="text-sm font-semibold text-yellow-800 mb-2">⚠️ พบความต่าง {diffItems.length} รายการ</p>
+                <div className="flex flex-wrap gap-2">
+                  {diffItems.map(item => {
+                    const diff = parseInt(item.actual_qty) - item.system_qty
+                    return (
+                      <div key={item.product_id} className="bg-white border border-yellow-200 rounded-lg px-3 py-1.5 text-sm">
+                        <span className="font-medium">{item.product_name}</span>
+                        <span className="text-rowa-muted ml-2">ระบบ: {item.system_qty}</span>
+                        <span className="text-rowa-muted"> → นับได้: {item.actual_qty}</span>
+                        <span className={`ml-2 font-bold ${diff > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          ({diff > 0 ? '+' : ''}{diff})
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {diffItems.length === 0 && selectedAudit.status !== 'draft' && (
+              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700 font-medium">
+                ✅ สต็อกตรงกันทุกรายการ
+              </div>
+            )}
+
+            <div className="card p-0 overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-rowa-bg/50 border-b border-gray-100">
+                    <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3 w-8">#</th>
+                    <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">สินค้า</th>
+                    <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">แบรนด์ / หมวดหมู่</th>
+                    <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3">สต็อกระบบ</th>
+                    <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3">นับได้</th>
+                    <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3">ผลต่าง</th>
+                    <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">หมายเหตุ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(selectedAudit.items ?? []).map((item, i) => {
+                    const actual = item.actual_qty !== '—' ? parseInt(item.actual_qty) : null
+                    const diff = actual !== null ? actual - item.system_qty : null
+                    const hasDiff = diff !== null && diff !== 0
+                    return (
+                      <tr key={item.product_id} className={`border-b border-gray-50 ${hasDiff ? 'bg-yellow-50/50' : ''}`}>
+                        <td className="px-4 py-2 text-xs text-gray-400">{i + 1}</td>
+                        <td className="px-4 py-2 text-sm font-medium">{item.product_name}<br /><span className="text-xs font-mono text-gray-400">{item.product_sku}</span></td>
+                        <td className="px-4 py-2 text-xs text-rowa-muted">{item.product_brand} · {item.product_category}</td>
+                        <td className="px-4 py-2 text-center text-sm">{item.system_qty}</td>
+                        <td className="px-4 py-2 text-center text-sm font-medium">{item.actual_qty !== '—' ? item.actual_qty : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-4 py-2 text-center text-sm font-bold">
+                          {diff !== null ? (
+                            <span className={diff === 0 ? 'text-green-600' : diff > 0 ? 'text-blue-600' : 'text-red-600'}>
+                              {diff === 0 ? '✓' : diff > 0 ? `+${diff}` : diff}
+                            </span>
+                          ) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-rowa-muted">{item.note || <span className="text-gray-300">—</span>}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* PRINT TEMPLATE */}
+      <div id="print-root" style={{ display: 'none' }} className="p-6">
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 'bold' }}>ROWA — ใบตรวจนับสต็อก</h1>
+          <p style={{ fontSize: 12, color: '#666' }}>
+            วันที่พิมพ์: {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+            {auditNote || selectedAudit?.note ? ` · ${auditNote || selectedAudit?.note}` : ''}
+          </p>
+        </div>
+        <table className="print-table">
+          <thead>
+            <tr>
+              <th style={{ width: 30 }}>#</th>
+              <th>ชื่อสินค้า</th>
+              <th>แบรนด์</th>
+              <th>หมวดหมู่</th>
+              <th>SKU</th>
+              <th style={{ width: 80 }}>ระบบ</th>
+              <th style={{ width: 80 }}>นับได้</th>
+              <th style={{ width: 120 }}>หมายเหตุ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(view === 'new' ? auditItems : selectedAudit?.items ?? []).map((item, i) => (
+              <tr key={item.product_id}>
+                <td style={{ textAlign: 'center' }}>{i + 1}</td>
+                <td>{item.product_name}</td>
+                <td>{item.product_brand}</td>
+                <td>{item.product_category}</td>
+                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{item.product_sku}</td>
+                <td style={{ textAlign: 'center' }}>{item.system_qty}</td>
+                <td style={{ textAlign: 'center' }}>{view === 'detail' && item.actual_qty !== '—' ? item.actual_qty : ''}</td>
+                <td>{view === 'detail' ? item.note : ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p style={{ marginTop: 24, fontSize: 11, color: '#999' }}>
+          ลายเซ็นผู้นับ: _________________________  วันที่: _______________
+        </p>
+      </div>
+    </>
+  )
+}

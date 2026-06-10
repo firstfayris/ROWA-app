@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Package, ShoppingCart, BarChart3,
-  Settings, LogOut, Store, ChevronLeft, ChevronRight, Megaphone
+  Settings, LogOut, Store, ChevronLeft, ChevronRight, Megaphone, ClipboardList
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
@@ -11,6 +11,7 @@ const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'ภาพรวม' },
   { to: '/products', icon: Package, label: 'สินค้า & สต็อก' },
   { to: '/orders', icon: ShoppingCart, label: 'คำสั่งซื้อ' },
+  { to: '/stock-audit', icon: ClipboardList, label: 'ตรวจนับสต็อก' },
   { to: '/reports', icon: BarChart3, label: 'รายงาน' },
   { to: '/marketing', icon: Megaphone, label: 'ค่าใช้จ่าย' },
   { to: '/settings', icon: Settings, label: 'ตั้งค่า', adminOnly: true },
