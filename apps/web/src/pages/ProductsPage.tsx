@@ -384,7 +384,7 @@ export function ProductsPage() {
                     </td>
                     <td className="px-6 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => {
+                        <Button variant="ghost" size="sm" style={{ whiteSpace: 'nowrap' }} onClick={() => {
                           setStockModal(product)
                           const vs = variantStocks[product.id] ?? []
                           setStockForm({ type: 'in', quantity: '', note: '', variant_id: vs.length > 0 ? vs[0].id : '' })
