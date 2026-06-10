@@ -124,18 +124,16 @@ export function SettingsPage() {
   }
 
   const inviteUser = async () => {
-    if (!inviteEmail || !invitePassword) return toast.error('กรุณาใส่อีเมลและรหัสผ่าน')
+    if (!inviteEmail || !invitePassword) return toast.error('กรุณาใส่ชื่อผู้ใช้และรหัสผ่าน')
     if (invitePassword.length < 6) return toast.error('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร')
     setInviting(true)
-    const { data, error } = await supabase.auth.signUp({
-      email: inviteEmail,
-      password: invitePassword,
-    })
+    const email = `${inviteEmail.trim().toLowerCase()}@rowa.internal`
+    const { data, error } = await supabase.auth.signUp({ email, password: invitePassword })
     if (error) { toast.error(error.message); setInviting(false); return }
     if (data.user) {
       await supabase.from('profiles').upsert({
         id: data.user.id,
-        full_name: inviteName || inviteEmail.split('@')[0],
+        full_name: inviteName || inviteEmail,
         role: inviteRole,
       })
     }
@@ -314,8 +312,8 @@ export function SettingsPage() {
           <div className="card">
             <h2 className="font-semibold mb-4">เพิ่มผู้ใช้ใหม่</h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
-              <Input label="ชื่อ" value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="ชื่อผู้ใช้" />
-              <Input label="อีเมล" type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="staff@example.com" />
+              <Input label="ชื่อ-นามสกุล" value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="เช่น สมฤทัย" />
+              <Input label="ชื่อผู้ใช้ (ใช้ login)" type="text" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="เช่น somruthai" />
               <Input label="รหัสผ่าน" type="password" value={invitePassword} onChange={e => setInvitePassword(e.target.value)} placeholder="อย่างน้อย 6 ตัวอักษร" />
               <div className="flex flex-col gap-1">
                 <label className="text-sm font-medium text-gray-700">สิทธิ์</label>

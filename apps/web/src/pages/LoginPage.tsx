@@ -7,7 +7,7 @@ import { Heart, ShoppingBag } from 'lucide-react'
 
 export function LoginPage() {
   const { signIn, user } = useAuthStore()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -19,10 +19,11 @@ export function LoginPage() {
     setError('')
     setLoading(true)
     try {
+      const email = `${username.trim().toLowerCase()}@rowa.internal`
       await signIn(email, password)
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'เข้าสู่ระบบไม่สำเร็จ'
-      setError(message === 'Invalid login credentials' ? 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' : message)
+      setError(message === 'Invalid login credentials' ? 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' : message)
     } finally {
       setLoading(false)
     }
@@ -94,11 +95,11 @@ export function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="อีเมล"
-              type="email"
-              placeholder="your@email.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
+              label="ชื่อผู้ใช้"
+              type="text"
+              placeholder="เช่น somruthai"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
               required
             />
             <Input
