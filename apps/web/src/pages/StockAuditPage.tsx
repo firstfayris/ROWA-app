@@ -4,9 +4,12 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
 import { useAuthStore } from '@/store/authStore'
-import { Printer, Plus, CheckCircle, ClipboardList, ChevronDown } from 'lucide-react'
+import { Printer, Plus, CheckCircle, ClipboardList, ChevronDown, FileText, FileSpreadsheet } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { formatCurrency } from '@/lib/utils'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import * as XLSX from 'xlsx'
 
 interface AuditItem {
   id?: string
@@ -29,6 +32,42 @@ interface Audit {
   reviewed_at: string | null
   created_by_name?: string
   items?: AuditItem[]
+}
+
+function ExportMenu({ onPrint, onPDF, onExcel, onClose }: {
+  onPrint: (f: 'all' | 'in-stock') => void
+  onPDF: (f: 'all' | 'in-stock') => void
+  onExcel: (f: 'all' | 'in-stock') => void
+  onClose: () => void
+}) {
+  const sections = [
+    { icon: <Printer className="h-4 w-4 text-gray-500" />, label: 'ปริ้น', action: onPrint },
+    { icon: <FileText className="h-4 w-4 text-red-500" />, label: 'ดาวน์โหลด PDF', action: onPDF },
+    { icon: <FileSpreadsheet className="h-4 w-4 text-green-600" />, label: 'ดาวน์โหลด Excel', action: onExcel },
+  ]
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden w-64">
+        {sections.map((s, si) => (
+          <div key={si}>
+            {si > 0 && <div className="border-t border-gray-100" />}
+            <p className="px-4 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+              {s.icon} {s.label}
+            </p>
+            <button onClick={() => s.action('all')} className="w-full text-left px-4 py-2 text-sm hover:bg-rowa-bg transition-colors flex items-center justify-between">
+              <span className="text-rowa-text">สินค้าทั้งหมด</span>
+              <span className="text-xs text-rowa-muted">รวมสต็อก = 0</span>
+            </button>
+            <button onClick={() => s.action('in-stock')} className="w-full text-left px-4 pb-2.5 pt-1 text-sm hover:bg-rowa-bg transition-colors flex items-center justify-between">
+              <span className="text-rowa-text">เฉพาะที่มีของอยู่</span>
+              <span className="text-xs text-green-600">สต็อก &gt; 0</span>
+            </button>
+          </div>
+        ))}
+      </div>
+    </>
+  )
 }
 
 const statusLabel: Record<string, string> = {
@@ -175,8 +214,102 @@ export function StockAuditPage() {
   const printAudit = (filter: 'all' | 'in-stock') => {
     setPrintFilter(filter)
     setShowPrintMenu(false)
-    // wait for state to update before printing
     setTimeout(() => window.print(), 50)
+  }
+
+  const getExportItems = (filter: 'all' | 'in-stock'): AuditItem[] => {
+    const base = view === 'new' ? auditItems : selectedAudit?.items ?? []
+    return filter === 'in-stock' ? base.filter(i => i.system_qty > 0) : base
+  }
+
+  const dateLabel = new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })
+  const noteLabel = auditNote || selectedAudit?.note || ''
+
+  const downloadPDF = (filter: 'all' | 'in-stock') => {
+    setShowPrintMenu(false)
+    const items = getExportItems(filter)
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+
+    // Header
+    doc.setFontSize(16)
+    doc.setFont('helvetica', 'bold')
+    doc.text('ROWA - Stock Count Sheet', 148, 14, { align: 'center' })
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(100)
+    const subLine = `Date: ${dateLabel}${noteLabel ? '  |  ' + noteLabel : ''}  |  ${filter === 'in-stock' ? 'In-stock items only' : 'All items'}`
+    doc.text(subLine, 148, 21, { align: 'center' })
+    doc.setTextColor(0)
+
+    autoTable(doc, {
+      startY: 26,
+      head: [['#', 'Product Name', 'Brand', 'Category', 'SKU', 'System Qty', 'Counted', 'Note']],
+      body: items.map((item, i) => [
+        i + 1,
+        item.product_name,
+        item.product_brand,
+        item.product_category,
+        item.product_sku,
+        item.system_qty,
+        view === 'detail' && item.actual_qty !== '—' ? item.actual_qty : '',
+        view === 'detail' ? item.note : '',
+      ]),
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [75, 93, 184], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 249, 255] },
+      columnStyles: {
+        0: { cellWidth: 10, halign: 'center' },
+        5: { cellWidth: 22, halign: 'center' },
+        6: { cellWidth: 22, halign: 'center' },
+      },
+    })
+
+    // Signature line
+    const finalY = (doc as any).lastAutoTable.finalY + 10
+    doc.setFontSize(9)
+    doc.setTextColor(120)
+    doc.text('Counted by: ___________________________   Date: _______________', 14, finalY)
+
+    const filterSuffix = filter === 'in-stock' ? '_in-stock' : '_all'
+    doc.save(`ROWA_StockCount_${new Date().toISOString().slice(0, 10)}${filterSuffix}.pdf`)
+    toast.success('ดาวน์โหลด PDF แล้ว')
+  }
+
+  const downloadExcel = (filter: 'all' | 'in-stock') => {
+    setShowPrintMenu(false)
+    const items = getExportItems(filter)
+    const isDetail = view === 'detail'
+
+    const headers = ['#', 'ชื่อสินค้า', 'แบรนด์', 'หมวดหมู่', 'SKU', 'สต็อกในระบบ', 'จำนวนที่นับได้', 'หมายเหตุ']
+    const rows = items.map((item, i) => [
+      i + 1,
+      item.product_name,
+      item.product_brand,
+      item.product_category,
+      item.product_sku,
+      item.system_qty,
+      isDetail && item.actual_qty !== '—' ? parseInt(item.actual_qty) : '',
+      isDetail ? item.note : '',
+    ])
+
+    const ws = XLSX.utils.aoa_to_sheet([
+      [`ROWA — ใบตรวจนับสต็อก`],
+      [`วันที่: ${dateLabel}${noteLabel ? '  |  ' + noteLabel : ''}  |  ${filter === 'in-stock' ? 'เฉพาะสินค้าที่มีของอยู่' : 'สินค้าทั้งหมด'}`],
+      [],
+      headers,
+      ...rows,
+      [],
+      ['ลายเซ็นผู้นับ: ___________________________', '', '', 'วันที่: _______________'],
+    ])
+
+    // Column widths
+    ws['!cols'] = [{ wch: 5 }, { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 20 }]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock Count')
+    const filterSuffix = filter === 'in-stock' ? '_in-stock' : '_all'
+    XLSX.writeFile(wb, `ROWA_StockCount_${new Date().toISOString().slice(0, 10)}${filterSuffix}.xlsx`)
+    toast.success('ดาวน์โหลด Excel แล้ว')
   }
 
   const diffItems = selectedAudit?.items?.filter(i => i.actual_qty !== '—' && parseInt(i.actual_qty) !== i.system_qty) ?? []
@@ -265,30 +398,9 @@ export function StockAuditPage() {
               <div className="flex gap-2">
                 <div className="relative">
                   <Button variant="secondary" onClick={() => setShowPrintMenu(m => !m)}>
-                    <Printer className="h-4 w-4" /> ปริ้นใบนับ <ChevronDown className="h-3.5 w-3.5 ml-1" />
+                    <Printer className="h-4 w-4" /> ปริ้น / ดาวน์โหลด <ChevronDown className="h-3.5 w-3.5 ml-1" />
                   </Button>
-                  {showPrintMenu && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShowPrintMenu(false)} />
-                      <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden w-52">
-                        <button onClick={() => printAudit('all')} className="w-full text-left px-4 py-2.5 text-sm hover:bg-rowa-bg transition-colors flex items-center gap-2">
-                          <Printer className="h-4 w-4 text-rowa-blue" />
-                          <div>
-                            <p className="font-medium text-rowa-text">สินค้าทั้งหมด</p>
-                            <p className="text-xs text-rowa-muted">รวมสินค้าที่หมดสต็อก</p>
-                          </div>
-                        </button>
-                        <div className="border-t border-gray-100" />
-                        <button onClick={() => printAudit('in-stock')} className="w-full text-left px-4 py-2.5 text-sm hover:bg-rowa-bg transition-colors flex items-center gap-2">
-                          <Printer className="h-4 w-4 text-green-600" />
-                          <div>
-                            <p className="font-medium text-rowa-text">เฉพาะที่มีของอยู่</p>
-                            <p className="text-xs text-rowa-muted">ตัดสินค้าที่สต็อก = 0 ออก</p>
-                          </div>
-                        </button>
-                      </div>
-                    </>
-                  )}
+                  {showPrintMenu && <ExportMenu onPrint={printAudit} onPDF={downloadPDF} onExcel={downloadExcel} onClose={() => setShowPrintMenu(false)} />}
                 </div>
                 <Button variant="secondary" loading={saving} onClick={() => saveAudit(false)}>บันทึกร่าง</Button>
                 <Button loading={saving} onClick={() => saveAudit(true)}><CheckCircle className="h-4 w-4" /> ส่งผลนับ</Button>
@@ -354,30 +466,9 @@ export function StockAuditPage() {
               <div className="flex gap-2">
                 <div className="relative">
                   <Button variant="secondary" onClick={() => setShowPrintMenu(m => !m)}>
-                    <Printer className="h-4 w-4" /> ปริ้น <ChevronDown className="h-3.5 w-3.5 ml-1" />
+                    <Printer className="h-4 w-4" /> ปริ้น / ดาวน์โหลด <ChevronDown className="h-3.5 w-3.5 ml-1" />
                   </Button>
-                  {showPrintMenu && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShowPrintMenu(false)} />
-                      <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden w-52">
-                        <button onClick={() => printAudit('all')} className="w-full text-left px-4 py-2.5 text-sm hover:bg-rowa-bg transition-colors flex items-center gap-2">
-                          <Printer className="h-4 w-4 text-rowa-blue" />
-                          <div>
-                            <p className="font-medium text-rowa-text">สินค้าทั้งหมด</p>
-                            <p className="text-xs text-rowa-muted">รวมสินค้าที่หมดสต็อก</p>
-                          </div>
-                        </button>
-                        <div className="border-t border-gray-100" />
-                        <button onClick={() => printAudit('in-stock')} className="w-full text-left px-4 py-2.5 text-sm hover:bg-rowa-bg transition-colors flex items-center gap-2">
-                          <Printer className="h-4 w-4 text-green-600" />
-                          <div>
-                            <p className="font-medium text-rowa-text">เฉพาะที่มีของอยู่</p>
-                            <p className="text-xs text-rowa-muted">ตัดสินค้าที่สต็อก = 0 ออก</p>
-                          </div>
-                        </button>
-                      </div>
-                    </>
-                  )}
+                  {showPrintMenu && <ExportMenu onPrint={printAudit} onPDF={downloadPDF} onExcel={downloadExcel} onClose={() => setShowPrintMenu(false)} />}
                 </div>
                 {isAdmin && selectedAudit.status === 'submitted' && (
                   <Button onClick={() => markReviewed(selectedAudit.id)}>
