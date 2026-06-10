@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase'
 import { formatCurrency } from '@/lib/utils'
 import { TrendingUp, TrendingDown, DollarSign } from 'lucide-react'
 import type { Platform } from '../lib/types'
+import { useAuthStore } from '@/store/authStore'
 
 interface PlatformRow {
   platform: Platform
@@ -26,6 +27,8 @@ const platformLabelTh: Record<Platform, string> = {
 }
 
 export function ReportsPage() {
+  const { profile } = useAuthStore()
+  const isAdmin = profile?.role === 'admin'
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date()
     d.setDate(1)
@@ -82,8 +85,8 @@ export function ReportsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-rowa-text">รายงาน กำไร-ขาดทุน</h1>
-          <p className="text-rowa-muted text-sm">เฉพาะ Admin เท่านั้น</p>
+          <h1 className="text-2xl font-bold text-rowa-text">รายงานยอดขาย</h1>
+          <p className="text-rowa-muted text-sm">{isAdmin ? 'รายได้ ต้นทุน และกำไร' : 'ยอดขายตาม Platform'}</p>
         </div>
         <Button variant="secondary" size="sm" onClick={fetchReport} loading={loading}>
           <RefreshCw className="h-4 w-4" /> รีเฟรช
@@ -106,20 +109,22 @@ export function ReportsPage() {
       {/* Summary stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="รายได้รวม" value={formatCurrency(totalRevenue)} icon={TrendingUp} color="blue" />
-        <StatCard title="ต้นทุนรวม" value={formatCurrency(totalCost)} icon={DollarSign} color="orange" />
-        <StatCard
-          title="กำไรสุทธิ"
-          value={formatCurrency(grossProfit)}
-          icon={grossProfit >= 0 ? TrendingUp : TrendingDown}
-          color={grossProfit >= 0 ? 'green' : 'pink'}
-        />
-        <StatCard title="Margin" value={`${margin.toFixed(1)}%`} subtitle={`${totalOrders} orders`} icon={TrendingUp} color="blue" />
+        <StatCard title="คำสั่งซื้อ" value={`${totalOrders}`} subtitle="รายการ" icon={TrendingUp} color="blue" />
+        {isAdmin && <>
+          <StatCard title="ต้นทุนรวม" value={formatCurrency(totalCost)} icon={DollarSign} color="orange" />
+          <StatCard
+            title="กำไรสุทธิ"
+            value={formatCurrency(grossProfit)}
+            icon={grossProfit >= 0 ? TrendingUp : TrendingDown}
+            color={grossProfit >= 0 ? 'green' : 'pink'}
+          />
+        </>}
       </div>
 
       {/* Platform breakdown chart */}
       {platformRows.length > 0 && (
         <div className="card">
-          <h2 className="font-semibold mb-4">รายได้ vs ต้นทุน vs กำไร ตาม Platform</h2>
+          <h2 className="font-semibold mb-4">ยอดขายตาม Platform</h2>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={platformRows.map(r => ({ ...r, name: platformLabelTh[r.platform] }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -128,8 +133,8 @@ export function ReportsPage() {
               <Tooltip formatter={(v: number) => formatCurrency(v)} />
               <Legend />
               <Bar dataKey="revenue" name="รายได้" fill="#4B5DB8" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="cost" name="ต้นทุน" fill="#F08090" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="profit" name="กำไร" fill="#22C55E" radius={[4, 4, 0, 0]} />
+              {isAdmin && <Bar dataKey="cost" name="ต้นทุน" fill="#F08090" radius={[4, 4, 0, 0]} />}
+              {isAdmin && <Bar dataKey="profit" name="กำไร" fill="#22C55E" radius={[4, 4, 0, 0]} />}
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -150,8 +155,8 @@ export function ReportsPage() {
                 <th className="text-left text-xs font-medium text-rowa-muted px-6 py-3">Platform</th>
                 <th className="text-right text-xs font-medium text-rowa-muted px-4 py-3">Orders</th>
                 <th className="text-right text-xs font-medium text-rowa-muted px-4 py-3">รายได้</th>
-                <th className="text-right text-xs font-medium text-rowa-muted px-4 py-3">ต้นทุน</th>
-                <th className="text-right text-xs font-medium text-rowa-muted px-6 py-3">กำไร</th>
+                {isAdmin && <th className="text-right text-xs font-medium text-rowa-muted px-4 py-3">ต้นทุน</th>}
+                {isAdmin && <th className="text-right text-xs font-medium text-rowa-muted px-6 py-3">กำไร</th>}
               </tr>
             </thead>
             <tbody>
@@ -160,18 +165,16 @@ export function ReportsPage() {
                   <td className="px-6 py-3 font-medium">{platformLabelTh[row.platform]}</td>
                   <td className="px-4 py-3 text-right text-sm">{row.orders}</td>
                   <td className="px-4 py-3 text-right text-sm">{formatCurrency(row.revenue)}</td>
-                  <td className="px-4 py-3 text-right text-sm text-orange-600">{formatCurrency(row.cost)}</td>
-                  <td className={`px-6 py-3 text-right text-sm font-semibold ${row.profit >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                    {formatCurrency(row.profit)}
-                  </td>
+                  {isAdmin && <td className="px-4 py-3 text-right text-sm text-orange-600">{formatCurrency(row.cost)}</td>}
+                  {isAdmin && <td className={`px-6 py-3 text-right text-sm font-semibold ${row.profit >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCurrency(row.profit)}</td>}
                 </tr>
               ))}
               <tr className="border-t-2 border-gray-200 bg-rowa-bg/30 font-semibold">
                 <td className="px-6 py-3">รวม</td>
                 <td className="px-4 py-3 text-right">{totalOrders}</td>
                 <td className="px-4 py-3 text-right">{formatCurrency(totalRevenue)}</td>
-                <td className="px-4 py-3 text-right text-orange-600">{formatCurrency(totalCost)}</td>
-                <td className={`px-6 py-3 text-right ${grossProfit >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCurrency(grossProfit)}</td>
+                {isAdmin && <td className="px-4 py-3 text-right text-orange-600">{formatCurrency(totalCost)}</td>}
+                {isAdmin && <td className={`px-6 py-3 text-right ${grossProfit >= 0 ? 'text-green-600' : 'text-red-500'}`}>{formatCurrency(grossProfit)}</td>}
               </tr>
             </tbody>
           </table>

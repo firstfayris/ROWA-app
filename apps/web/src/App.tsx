@@ -53,8 +53,8 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="products" element={<ProductsPage />} />
           <Route path="orders" element={<OrdersPage />} />
-          <Route path="reports" element={<RequireAdmin><ReportsPage /></RequireAdmin>} />
-          <Route path="marketing" element={<RequireAdmin><MarketingPage /></RequireAdmin>} />
+          <Route path="reports" element={<ReportsPage />} />
+          <Route path="marketing" element={<MarketingPage />} />
           <Route path="settings" element={<RequireAdmin><SettingsPage /></RequireAdmin>} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -17,6 +17,9 @@ interface OrderRow {
   platform_order_id: string | null
   status: OrderStatus
   total_amount: number
+  payment_method: string | null
+  payment_date: string | null
+  slip_url: string | null
   created_at: string
   order_items?: { id: string; quantity: number; unit_price: number; product?: { name: string } }[]
 }
@@ -57,6 +60,10 @@ export function OrdersPage() {
   const [showSaleModal, setShowSaleModal] = useState(false)
   const [salePlatform, setSalePlatform] = useState<Platform>('store')
   const [saleOrderId, setSaleOrderId] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer'>('cash')
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [slipFile, setSlipFile] = useState<File | null>(null)
+  const [slipPreview, setSlipPreview] = useState<string | null>(null)
   const [saleItems, setSaleItems] = useState<SaleItem[]>([{ product_id: '', product_name: '', quantity: 1, unit_price: 0, cost_price: 0 }])
   const [products, setProducts] = useState<{ id: string; name: string; cost_price: number }[]>([])
   const [saving, setSaving] = useState(false)
@@ -91,6 +98,18 @@ export function OrdersPage() {
     if (validItems.length === 0) { toast.error('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ'); return }
     setSaving(true)
     const total = validItems.reduce((s, i) => s + i.quantity * i.unit_price, 0)
+    // Upload slip if provided
+    let slip_url: string | null = null
+    if (slipFile) {
+      const ext = slipFile.name.split('.').pop()
+      const path = `${Date.now()}.${ext}`
+      const { data: uploadData } = await supabase.storage.from('payment-slips').upload(path, slipFile)
+      if (uploadData) {
+        const { data: urlData } = supabase.storage.from('payment-slips').getPublicUrl(path)
+        slip_url = urlData.publicUrl
+      }
+    }
+
     const { data: order, error } = await supabase
       .from('orders')
       .insert({
@@ -98,6 +117,9 @@ export function OrdersPage() {
         platform_order_id: saleOrderId || null,
         status: 'delivered',
         total_amount: total,
+        payment_method: paymentMethod,
+        payment_date: paymentDate,
+        slip_url,
       })
       .select()
       .single()
@@ -129,6 +151,10 @@ export function OrdersPage() {
     setShowSaleModal(false)
     setSalePlatform('store')
     setSaleOrderId('')
+    setPaymentMethod('cash')
+    setPaymentDate(new Date().toISOString().split('T')[0])
+    setSlipFile(null)
+    setSlipPreview(null)
     setSaleItems([{ product_id: '', product_name: '', quantity: 1, unit_price: 0, cost_price: 0 }])
     fetchOrders()
     setSaving(false)
@@ -214,7 +240,7 @@ export function OrdersPage() {
                   </div>
                 </button>
                 {expandedId === order.id && order.order_items && (
-                  <div className="px-6 pb-4 bg-rowa-bg/20">
+                  <div className="px-6 pb-4 bg-rowa-bg/20 space-y-3">
                     <div className="border border-gray-100 rounded-xl overflow-hidden">
                       {order.order_items.map(item => (
                         <div key={item.id} className="flex items-center justify-between px-4 py-2 border-b border-gray-50 last:border-0 text-sm">
@@ -223,6 +249,22 @@ export function OrdersPage() {
                         </div>
                       ))}
                     </div>
+                    {(order.payment_method || order.slip_url) && (
+                      <div className="flex flex-wrap items-center gap-3 text-sm">
+                        {order.payment_method && (
+                          <span className="bg-white border border-gray-200 rounded-lg px-3 py-1">
+                            {order.payment_method === 'cash' ? '💵 เงินสด' : '📱 โอนเงิน'}
+                          </span>
+                        )}
+                        {order.payment_date && (
+                          <span className="text-rowa-muted">รับเงิน {new Date(order.payment_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })}</span>
+                        )}
+                        {order.slip_url && (
+                          <a href={order.slip_url} target="_blank" rel="noreferrer"
+                            className="text-rowa-blue underline text-xs">ดูสลิป</a>
+                        )}
+                      </div>
+                    )}
                     {isAdmin && (
                       <div className="mt-3 flex justify-end gap-2">
                         {(['confirmed', 'shipped', 'delivered', 'cancelled'] as OrderStatus[]).map(s => (
@@ -308,6 +350,37 @@ export function OrdersPage() {
                 <Plus className="h-4 w-4" /> เพิ่มสินค้า
               </Button>
             </div>
+            {/* Payment info */}
+            <div className="border border-gray-100 rounded-xl p-3 space-y-3 mt-2">
+              <p className="text-sm font-medium text-rowa-text">การชำระเงิน</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-700">ช่องทาง</label>
+                  <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+                    {([['cash', '💵 เงินสด'], ['transfer', '📱 โอนเงิน']] as const).map(([val, label]) => (
+                      <button key={val} type="button" onClick={() => setPaymentMethod(val)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${paymentMethod === val ? 'bg-white text-rowa-blue shadow-sm' : 'text-gray-500'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Input label="วันที่รับเงิน" type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} />
+              </div>
+              {paymentMethod === 'transfer' && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-700">แนบสลิป</label>
+                  <input type="file" accept="image/*" className="text-sm"
+                    onChange={e => {
+                      const f = e.target.files?.[0] ?? null
+                      setSlipFile(f)
+                      setSlipPreview(f ? URL.createObjectURL(f) : null)
+                    }} />
+                  {slipPreview && <img src={slipPreview} className="mt-2 h-32 object-contain rounded-lg border border-gray-200" />}
+                </div>
+              )}
+            </div>
+
             <div className="border-t border-gray-100 mt-4 pt-3">
               <div className="flex justify-between text-sm font-semibold">
                 <span>รวม</span>

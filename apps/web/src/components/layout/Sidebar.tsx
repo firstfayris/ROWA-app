@@ -11,8 +11,8 @@ const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'ภาพรวม' },
   { to: '/products', icon: Package, label: 'สินค้า & สต็อก' },
   { to: '/orders', icon: ShoppingCart, label: 'คำสั่งซื้อ' },
-  { to: '/reports', icon: BarChart3, label: 'รายงาน', adminOnly: true },
-  { to: '/marketing', icon: Megaphone, label: 'ค่าใช้จ่าย', adminOnly: true },
+  { to: '/reports', icon: BarChart3, label: 'รายงาน' },
+  { to: '/marketing', icon: Megaphone, label: 'ค่าใช้จ่าย' },
   { to: '/settings', icon: Settings, label: 'ตั้งค่า', adminOnly: true },
 ]
 
