@@ -8,7 +8,7 @@ import { Printer, Plus, CheckCircle, ClipboardList, ChevronDown, FileText, FileS
 import toast from 'react-hot-toast'
 import { formatCurrency } from '@/lib/utils'
 import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
+import html2canvas from 'html2canvas'
 import * as XLSX from 'xlsx'
 
 interface AuditItem {
@@ -225,54 +225,85 @@ export function StockAuditPage() {
   const dateLabel = new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })
   const noteLabel = auditNote || selectedAudit?.note || ''
 
-  const downloadPDF = (filter: 'all' | 'in-stock') => {
+  const downloadPDF = async (filter: 'all' | 'in-stock') => {
     setShowPrintMenu(false)
     const items = getExportItems(filter)
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-
-    // Header
-    doc.setFontSize(16)
-    doc.setFont('helvetica', 'bold')
-    doc.text('ROWA - Stock Count Sheet', 148, 14, { align: 'center' })
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(100)
-    const subLine = `Date: ${dateLabel}${noteLabel ? '  |  ' + noteLabel : ''}  |  ${filter === 'in-stock' ? 'In-stock items only' : 'All items'}`
-    doc.text(subLine, 148, 21, { align: 'center' })
-    doc.setTextColor(0)
-
-    autoTable(doc, {
-      startY: 26,
-      head: [['#', 'Product Name', 'Brand', 'Category', 'SKU', 'System Qty', 'Counted', 'Note']],
-      body: items.map((item, i) => [
-        i + 1,
-        item.product_name,
-        item.product_brand,
-        item.product_category,
-        item.product_sku,
-        item.system_qty,
-        view === 'detail' && item.actual_qty !== '—' ? item.actual_qty : '',
-        view === 'detail' ? item.note : '',
-      ]),
-      styles: { fontSize: 9, cellPadding: 3 },
-      headStyles: { fillColor: [75, 93, 184], textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [248, 249, 255] },
-      columnStyles: {
-        0: { cellWidth: 10, halign: 'center' },
-        5: { cellWidth: 22, halign: 'center' },
-        6: { cellWidth: 22, halign: 'center' },
-      },
-    })
-
-    // Signature line
-    const finalY = (doc as any).lastAutoTable.finalY + 10
-    doc.setFontSize(9)
-    doc.setTextColor(120)
-    doc.text('Counted by: ___________________________   Date: _______________', 14, finalY)
-
+    const isDetail = view === 'detail'
     const filterSuffix = filter === 'in-stock' ? '_in-stock' : '_all'
-    doc.save(`ROWA_StockCount_${new Date().toISOString().slice(0, 10)}${filterSuffix}.pdf`)
-    toast.success('ดาวน์โหลด PDF แล้ว')
+
+    // Build a hidden HTML element with Thai text rendered by the browser
+    const container = document.createElement('div')
+    container.style.cssText = 'position:fixed;left:-9999px;top:0;width:1123px;background:#fff;font-family:sans-serif;font-size:12px;padding:24px'
+    container.innerHTML = `
+      <div style="text-align:center;margin-bottom:14px">
+        <div style="font-size:20px;font-weight:bold;color:#4B5DB8">ROWA — ใบตรวจนับสต็อก</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">
+          วันที่พิมพ์: ${dateLabel}${noteLabel ? ' · ' + noteLabel : ''} · ${filter === 'in-stock' ? 'เฉพาะสินค้าที่มีของอยู่' : 'สินค้าทั้งหมด'}
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead>
+          <tr style="background:#4B5DB8;color:#fff">
+            <th style="padding:6px 8px;border:1px solid #3a4a9a;width:30px">#</th>
+            <th style="padding:6px 8px;border:1px solid #3a4a9a;text-align:left">ชื่อสินค้า</th>
+            <th style="padding:6px 8px;border:1px solid #3a4a9a;text-align:left">แบรนด์</th>
+            <th style="padding:6px 8px;border:1px solid #3a4a9a;text-align:left">หมวดหมู่</th>
+            <th style="padding:6px 8px;border:1px solid #3a4a9a;text-align:left">SKU</th>
+            <th style="padding:6px 8px;border:1px solid #3a4a9a;width:70px">สต็อกระบบ</th>
+            <th style="padding:6px 8px;border:1px solid #3a4a9a;width:70px">นับได้</th>
+            <th style="padding:6px 8px;border:1px solid #3a4a9a;width:120px;text-align:left">หมายเหตุ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item, i) => `
+            <tr style="background:${i % 2 === 0 ? '#fff' : '#f8f9ff'}">
+              <td style="padding:5px 8px;border:1px solid #ddd;text-align:center">${i + 1}</td>
+              <td style="padding:5px 8px;border:1px solid #ddd">${item.product_name}</td>
+              <td style="padding:5px 8px;border:1px solid #ddd">${item.product_brand}</td>
+              <td style="padding:5px 8px;border:1px solid #ddd">${item.product_category}</td>
+              <td style="padding:5px 8px;border:1px solid #ddd;font-family:monospace;font-size:10px">${item.product_sku}</td>
+              <td style="padding:5px 8px;border:1px solid #ddd;text-align:center">${item.system_qty}</td>
+              <td style="padding:5px 8px;border:1px solid #ddd;text-align:center">${isDetail && item.actual_qty !== '—' ? item.actual_qty : ''}</td>
+              <td style="padding:5px 8px;border:1px solid #ddd">${isDetail ? item.note : ''}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="margin-top:20px;font-size:11px;color:#888">
+        ลายเซ็นผู้นับ: ___________________________&nbsp;&nbsp;&nbsp; วันที่: _______________
+      </div>
+    `
+    document.body.appendChild(container)
+
+    try {
+      const canvas = await html2canvas(container, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const pageW = pdf.internal.pageSize.getWidth()
+      const pageH = pdf.internal.pageSize.getHeight()
+      const imgW = pageW - 10
+      const imgH = (canvas.height * imgW) / canvas.width
+
+      // paginate if content taller than one page
+      let y = 5
+      let remaining = imgH
+      while (remaining > 0) {
+        const sliceH = Math.min(remaining, pageH - 10)
+        const srcY = (imgH - remaining) * (canvas.height / imgH)
+        const sliceCanvas = document.createElement('canvas')
+        sliceCanvas.width = canvas.width
+        sliceCanvas.height = sliceH * (canvas.height / imgH)
+        const ctx = sliceCanvas.getContext('2d')!
+        ctx.drawImage(canvas, 0, srcY, canvas.width, sliceCanvas.height, 0, 0, canvas.width, sliceCanvas.height)
+        pdf.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', 5, y, imgW, sliceH)
+        remaining -= sliceH
+        if (remaining > 0) { pdf.addPage(); y = 5 }
+      }
+
+      pdf.save(`ROWA_StockCount_${new Date().toISOString().slice(0, 10)}${filterSuffix}.pdf`)
+      toast.success('ดาวน์โหลด PDF แล้ว')
+    } finally {
+      document.body.removeChild(container)
+    }
   }
 
   const downloadExcel = (filter: 'all' | 'in-stock') => {
