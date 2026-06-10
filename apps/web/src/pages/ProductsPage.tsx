@@ -74,6 +74,7 @@ export function ProductsPage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [stockModal, setStockModal] = useState<ProductStock | null>(null)
   const [stockForm, setStockForm] = useState<StockAdjForm>({ type: 'in', quantity: '', note: '' })
+  const [stockFilter, setStockFilter] = useState<'all' | 'out' | 'low'>('all')
 
   const fetchAll = async () => {
     setLoading(true)
@@ -90,11 +91,15 @@ export function ProductsPage() {
 
   const brands = [...new Set(categories.map(c => c.brand))]
 
+  const outOfStock = products.filter(p => p.current_stock === 0)
+  const lowStock = products.filter(p => p.current_stock > 0 && p.current_stock <= 5)
+
   const filtered = products.filter(p => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase())
     const matchCat = !filterCategory || p.category_id === filterCategory
     const matchBrand = !filterBrand || categories.find(c => c.id === p.category_id)?.brand === filterBrand
-    return matchSearch && matchCat && matchBrand
+    const matchStock = stockFilter === 'all' || (stockFilter === 'out' && p.current_stock === 0) || (stockFilter === 'low' && p.current_stock > 0 && p.current_stock <= 5)
+    return matchSearch && matchCat && matchBrand && matchStock
   })
 
   const getCategoryById = (id: string | null) => categories.find(c => c.id === id)
@@ -190,6 +195,58 @@ export function ProductsPage() {
         {isAdmin && <Button onClick={openCreate}><Plus className="h-4 w-4" /> เพิ่มสินค้า</Button>}
       </div>
 
+      {/* Stock summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'สินค้าทั้งหมด', value: products.length, color: 'bg-rowa-blue/10 text-rowa-blue', filter: 'all' as const },
+          { label: 'มีสต็อก', value: products.filter(p => p.current_stock > 5).length, color: 'bg-green-100 text-green-700', filter: 'all' as const },
+          { label: 'ใกล้หมด (≤5)', value: lowStock.length, color: 'bg-orange-100 text-orange-600', filter: 'low' as const },
+          { label: 'หมดสต็อก', value: outOfStock.length, color: 'bg-red-100 text-red-600', filter: 'out' as const },
+        ].map(({ label, value, color, filter }) => (
+          <button key={label} onClick={() => setStockFilter(stockFilter === filter && filter !== 'all' ? 'all' : filter)}
+            className={`card text-left transition-all hover:shadow-md ${stockFilter === filter && filter !== 'all' ? 'ring-2 ring-rowa-blue' : ''}`}>
+            <p className="text-xs text-rowa-muted">{label}</p>
+            <p className={`text-2xl font-bold mt-1 inline-block px-2 py-0.5 rounded-lg ${color}`}>{value}</p>
+          </button>
+        ))}
+      </div>
+
+      {/* Alert: out of stock */}
+      {(outOfStock.length > 0 || lowStock.length > 0) && (
+        <div className="space-y-2">
+          {outOfStock.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+              <p className="text-sm font-semibold text-red-700 mb-2">🚨 หมดสต็อก ({outOfStock.length} รายการ)</p>
+              <div className="flex flex-wrap gap-2">
+                {outOfStock.map(p => (
+                  <button key={p.id} onClick={() => { setStockModal(p); setStockForm({ type: 'in', quantity: '', note: '' }) }}
+                    className="flex items-center gap-1.5 bg-white border border-red-200 rounded-lg px-3 py-1.5 text-sm hover:border-red-400 transition-colors">
+                    <span className="font-medium text-red-700">{p.name}</span>
+                    <span className="text-xs text-red-400">({p.sku})</span>
+                    <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">+ เติม</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {lowStock.length > 0 && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
+              <p className="text-sm font-semibold text-orange-700 mb-2">⚠️ ใกล้หมด ({lowStock.length} รายการ)</p>
+              <div className="flex flex-wrap gap-2">
+                {lowStock.map(p => (
+                  <button key={p.id} onClick={() => { setStockModal(p); setStockForm({ type: 'in', quantity: '', note: '' }) }}
+                    className="flex items-center gap-1.5 bg-white border border-orange-200 rounded-lg px-3 py-1.5 text-sm hover:border-orange-400 transition-colors">
+                    <span className="font-medium text-orange-700">{p.name}</span>
+                    <span className="text-xs text-orange-400">({p.sku})</span>
+                    <span className="text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">{p.current_stock} ชิ้น</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <div className="relative">
@@ -207,7 +264,7 @@ export function ProductsPage() {
           ))}
         </select>
         {(filterBrand || filterCategory || search) && (
-          <button className="text-sm text-rowa-muted hover:text-rowa-text" onClick={() => { setSearch(''); setFilterBrand(''); setFilterCategory('') }}>
+          <button className="text-sm text-rowa-muted hover:text-rowa-text" onClick={() => { setSearch(''); setFilterBrand(''); setFilterCategory(''); setStockFilter('all') }}>
             ล้างตัวกรอง
           </button>
         )}
