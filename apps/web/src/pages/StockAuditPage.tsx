@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
 import { useAuthStore } from '@/store/authStore'
-import { Printer, Plus, CheckCircle, ClipboardList, ChevronDown, ChevronUp } from 'lucide-react'
+import { Printer, Plus, CheckCircle, ClipboardList, ChevronDown } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { formatCurrency } from '@/lib/utils'
 
@@ -58,6 +58,10 @@ export function StockAuditPage() {
   // Detail view
   const [selectedAudit, setSelectedAudit] = useState<Audit | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  // Print
+  const [printFilter, setPrintFilter] = useState<'all' | 'in-stock'>('all')
+  const [showPrintMenu, setShowPrintMenu] = useState(false)
 
   const fetchAudits = async () => {
     setLoading(true)
@@ -168,7 +172,12 @@ export function StockAuditPage() {
     setView('list')
   }
 
-  const printAudit = () => window.print()
+  const printAudit = (filter: 'all' | 'in-stock') => {
+    setPrintFilter(filter)
+    setShowPrintMenu(false)
+    // wait for state to update before printing
+    setTimeout(() => window.print(), 50)
+  }
 
   const diffItems = selectedAudit?.items?.filter(i => i.actual_qty !== '—' && parseInt(i.actual_qty) !== i.system_qty) ?? []
 
@@ -254,7 +263,33 @@ export function StockAuditPage() {
             <div className="card flex flex-wrap gap-4 items-end justify-between">
               <Input label="หมายเหตุ (ไม่บังคับ)" value={auditNote} onChange={e => setAuditNote(e.target.value)} placeholder="เช่น นับสต็อกประจำเดือน มิ.ย." className="w-72" />
               <div className="flex gap-2">
-                <Button variant="secondary" onClick={printAudit}><Printer className="h-4 w-4" /> ปริ้นใบนับ</Button>
+                <div className="relative">
+                  <Button variant="secondary" onClick={() => setShowPrintMenu(m => !m)}>
+                    <Printer className="h-4 w-4" /> ปริ้นใบนับ <ChevronDown className="h-3.5 w-3.5 ml-1" />
+                  </Button>
+                  {showPrintMenu && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowPrintMenu(false)} />
+                      <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden w-52">
+                        <button onClick={() => printAudit('all')} className="w-full text-left px-4 py-2.5 text-sm hover:bg-rowa-bg transition-colors flex items-center gap-2">
+                          <Printer className="h-4 w-4 text-rowa-blue" />
+                          <div>
+                            <p className="font-medium text-rowa-text">สินค้าทั้งหมด</p>
+                            <p className="text-xs text-rowa-muted">รวมสินค้าที่หมดสต็อก</p>
+                          </div>
+                        </button>
+                        <div className="border-t border-gray-100" />
+                        <button onClick={() => printAudit('in-stock')} className="w-full text-left px-4 py-2.5 text-sm hover:bg-rowa-bg transition-colors flex items-center gap-2">
+                          <Printer className="h-4 w-4 text-green-600" />
+                          <div>
+                            <p className="font-medium text-rowa-text">เฉพาะที่มีของอยู่</p>
+                            <p className="text-xs text-rowa-muted">ตัดสินค้าที่สต็อก = 0 ออก</p>
+                          </div>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
                 <Button variant="secondary" loading={saving} onClick={() => saveAudit(false)}>บันทึกร่าง</Button>
                 <Button loading={saving} onClick={() => saveAudit(true)}><CheckCircle className="h-4 w-4" /> ส่งผลนับ</Button>
               </div>
@@ -317,7 +352,33 @@ export function StockAuditPage() {
                 {selectedAudit.note && <span className="text-sm text-rowa-muted">· {selectedAudit.note}</span>}
               </div>
               <div className="flex gap-2">
-                <Button variant="secondary" onClick={printAudit}><Printer className="h-4 w-4" /> ปริ้น</Button>
+                <div className="relative">
+                  <Button variant="secondary" onClick={() => setShowPrintMenu(m => !m)}>
+                    <Printer className="h-4 w-4" /> ปริ้น <ChevronDown className="h-3.5 w-3.5 ml-1" />
+                  </Button>
+                  {showPrintMenu && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowPrintMenu(false)} />
+                      <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden w-52">
+                        <button onClick={() => printAudit('all')} className="w-full text-left px-4 py-2.5 text-sm hover:bg-rowa-bg transition-colors flex items-center gap-2">
+                          <Printer className="h-4 w-4 text-rowa-blue" />
+                          <div>
+                            <p className="font-medium text-rowa-text">สินค้าทั้งหมด</p>
+                            <p className="text-xs text-rowa-muted">รวมสินค้าที่หมดสต็อก</p>
+                          </div>
+                        </button>
+                        <div className="border-t border-gray-100" />
+                        <button onClick={() => printAudit('in-stock')} className="w-full text-left px-4 py-2.5 text-sm hover:bg-rowa-bg transition-colors flex items-center gap-2">
+                          <Printer className="h-4 w-4 text-green-600" />
+                          <div>
+                            <p className="font-medium text-rowa-text">เฉพาะที่มีของอยู่</p>
+                            <p className="text-xs text-rowa-muted">ตัดสินค้าที่สต็อก = 0 ออก</p>
+                          </div>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
                 {isAdmin && selectedAudit.status === 'submitted' && (
                   <Button onClick={() => markReviewed(selectedAudit.id)}>
                     <CheckCircle className="h-4 w-4" /> ยืนยันตรวจแล้ว
@@ -404,8 +465,14 @@ export function StockAuditPage() {
           <p style={{ fontSize: 12, color: '#666' }}>
             วันที่พิมพ์: {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
             {auditNote || selectedAudit?.note ? ` · ${auditNote || selectedAudit?.note}` : ''}
+            {' · '}{printFilter === 'in-stock' ? 'เฉพาะสินค้าที่มีของอยู่' : 'สินค้าทั้งหมด'}
           </p>
         </div>
+        {printFilter === 'in-stock' && (
+          <p style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>
+            * แสดงเฉพาะสินค้าที่มีสต็อกอยู่ในระบบ (ไม่รวมรายการที่สต็อก = 0)
+          </p>
+        )}
         <table className="print-table">
           <thead>
             <tr>
@@ -420,18 +487,20 @@ export function StockAuditPage() {
             </tr>
           </thead>
           <tbody>
-            {(view === 'new' ? auditItems : selectedAudit?.items ?? []).map((item, i) => (
-              <tr key={item.product_id}>
-                <td style={{ textAlign: 'center' }}>{i + 1}</td>
-                <td>{item.product_name}</td>
-                <td>{item.product_brand}</td>
-                <td>{item.product_category}</td>
-                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{item.product_sku}</td>
-                <td style={{ textAlign: 'center' }}>{item.system_qty}</td>
-                <td style={{ textAlign: 'center' }}>{view === 'detail' && item.actual_qty !== '—' ? item.actual_qty : ''}</td>
-                <td>{view === 'detail' ? item.note : ''}</td>
-              </tr>
-            ))}
+            {(view === 'new' ? auditItems : selectedAudit?.items ?? [])
+              .filter(item => printFilter === 'all' || item.system_qty > 0)
+              .map((item, i) => (
+                <tr key={item.product_id}>
+                  <td style={{ textAlign: 'center' }}>{i + 1}</td>
+                  <td>{item.product_name}</td>
+                  <td>{item.product_brand}</td>
+                  <td>{item.product_category}</td>
+                  <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{item.product_sku}</td>
+                  <td style={{ textAlign: 'center' }}>{item.system_qty}</td>
+                  <td style={{ textAlign: 'center' }}>{view === 'detail' && item.actual_qty !== '—' ? item.actual_qty : ''}</td>
+                  <td>{view === 'detail' ? item.note : ''}</td>
+                </tr>
+              ))}
           </tbody>
         </table>
         <p style={{ marginTop: 24, fontSize: 11, color: '#999' }}>
