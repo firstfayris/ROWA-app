@@ -338,8 +338,8 @@ export function ProductsPage() {
                 <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">หมวดหมู่</th>
                 <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">SKU</th>
                 {canViewCost && <th className="text-right text-xs font-medium text-rowa-muted px-4 py-3" style={{ minWidth: 90 }}>ต้นทุน</th>}
-                <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3" style={{ minWidth: 110 }}>สต็อก</th>
-                <th className="text-right text-xs font-medium text-rowa-muted px-6 py-3" style={{ minWidth: 130 }}>จัดการ</th>
+                <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3 whitespace-nowrap" style={{ minWidth: 110 }}>สต็อก</th>
+                <th className="text-right text-xs font-medium text-rowa-muted px-6 py-3 whitespace-nowrap" style={{ minWidth: 130 }}>จัดการ</th>
               </tr>
             </thead>
             <tbody>
