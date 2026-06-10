@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { Plus, Search, Package, Pencil, Trash2, ArrowUp, ArrowDown, Upload, X, Tag, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Search, Package, Pencil, Trash2, ArrowUp, ArrowDown, Upload, X, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
@@ -97,17 +97,24 @@ export function ProductsPage() {
   const [stockModal, setStockModal] = useState<ProductStock | null>(null)
   const [stockForm, setStockForm] = useState<StockAdjForm>({ type: 'in', quantity: '', note: '', variant_id: '' })
   const [stockFilter, setStockFilter] = useState<'all' | 'out' | 'low'>('all')
-  const [expandedProductId, setExpandedProductId] = useState<string | null>(null)
   const [variantStocks, setVariantStocks] = useState<Record<string, VariantStock[]>>({})
 
   const fetchAll = async () => {
     setLoading(true)
-    const [{ data: prods }, { data: cats }] = await Promise.all([
+    const [{ data: prods }, { data: cats }, { data: allVariants }] = await Promise.all([
       supabase.from('product_stock').select('*, category_id').order('name'),
       supabase.from('categories').select('*').order('brand,name'),
+      supabase.from('variant_stock').select('*'),
     ])
     setProducts(prods ?? [])
     setCategories(cats ?? [])
+    // Group variants by product_id
+    const grouped: Record<string, VariantStock[]> = {}
+    for (const v of allVariants ?? []) {
+      if (!grouped[v.product_id]) grouped[v.product_id] = []
+      grouped[v.product_id].push(v)
+    }
+    setVariantStocks(grouped)
     setLoading(false)
   }
 
@@ -129,12 +136,6 @@ export function ProductsPage() {
   const getCategoryById = (id: string | null) => categories.find(c => c.id === id)
 
   const openCreate = () => { setForm(defaultForm()); setEditId(null); setShowForm(true) }
-
-  const loadVariants = async (productId: string) => {
-    const { data } = await supabase.from('variant_stock').select('*').eq('product_id', productId)
-    setVariantStocks(prev => ({ ...prev, [productId]: data ?? [] }))
-    return data ?? []
-  }
 
   const openEdit = async (p: ProductStock) => {
     const [{ data: platforms }, { data: variants }] = await Promise.all([
@@ -351,7 +352,20 @@ export function ProductsPage() {
                         <div className="w-10 h-10 rounded-lg bg-rowa-blue/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
                           {product.image_url ? <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" /> : <Package className="h-5 w-5 text-rowa-blue" />}
                         </div>
-                        <span className="font-medium text-sm text-rowa-text">{product.name}</span>
+                        <div>
+                          <span className="font-medium text-sm text-rowa-text">{product.name}</span>
+                          {(variantStocks[product.id] ?? []).length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {(variantStocks[product.id] ?? []).map(v => (
+                                <span key={v.id} className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium
+                                  ${v.current_stock === 0 ? 'bg-red-50 border-red-200 text-red-600' : v.current_stock <= 5 ? 'bg-orange-50 border-orange-200 text-orange-600' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
+                                  {[v.color, v.size].filter(Boolean).join(' / ')}
+                                  <span className="font-bold">{v.current_stock}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -370,17 +384,11 @@ export function ProductsPage() {
                     </td>
                     <td className="px-6 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={async () => {
-                          const vs = await loadVariants(product.id)
+                        <Button variant="ghost" size="sm" onClick={() => {
                           setStockModal(product)
+                          const vs = variantStocks[product.id] ?? []
                           setStockForm({ type: 'in', quantity: '', note: '', variant_id: vs.length > 0 ? vs[0].id : '' })
                         }}>สต็อก</Button>
-                        <button onClick={async () => {
-                          if (expandedProductId !== product.id) { await loadVariants(product.id); setExpandedProductId(product.id) }
-                          else setExpandedProductId(null)
-                        }} className="p-1.5 rounded hover:bg-gray-100">
-                          {expandedProductId === product.id ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
-                        </button>
                         {isAdmin && <>
                           <Button variant="ghost" size="sm" onClick={() => openEdit(product)}><Pencil className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="sm" onClick={() => deleteProduct(product.id)}><Trash2 className="h-4 w-4 text-red-400" /></Button>
@@ -388,27 +396,6 @@ export function ProductsPage() {
                       </div>
                     </td>
                   </tr>
-                  {expandedProductId === product.id && (
-                    <tr key={`${product.id}-variants`}>
-                      <td colSpan={canViewCost ? 6 : 5} className="px-6 pb-3 bg-gray-50/50">
-                        {(variantStocks[product.id] ?? []).length === 0 ? (
-                          <p className="text-xs text-rowa-muted py-2">ไม่มีตัวเลือกสินค้า (ไม่แยกสี/ไซส์)</p>
-                        ) : (
-                          <div className="flex flex-wrap gap-2 py-2">
-                            {variantStocks[product.id].map(v => (
-                              <div key={v.id} className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-sm">
-                                {v.color && <span className="font-medium">{v.color}</span>}
-                                {v.size && <span className="text-rowa-muted">{v.size}</span>}
-                                <Badge variant={v.current_stock === 0 ? 'danger' : v.current_stock <= 5 ? 'warning' : 'success'}>
-                                  {v.current_stock} ชิ้น
-                                </Badge>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  )}
                 </>)
               })}
             </tbody>
