@@ -323,7 +323,7 @@ export function ProductsPage() {
       </div>
 
       {/* Product list */}
-      <div className="card p-0 overflow-hidden">
+      <div className="card p-0 overflow-x-auto">
         {loading ? (
           <div className="flex items-center justify-center py-16 text-rowa-muted">กำลังโหลด...</div>
         ) : filtered.length === 0 ? (
@@ -331,15 +331,15 @@ export function ProductsPage() {
             <Package className="h-10 w-10 opacity-30" /><p>ไม่พบสินค้า</p>
           </div>
         ) : (
-          <table className="w-full">
+          <table className="w-full min-w-[640px]">
             <thead>
               <tr className="border-b border-gray-100 bg-rowa-bg/50">
                 <th className="text-left text-xs font-medium text-rowa-muted px-6 py-3">สินค้า</th>
                 <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">หมวดหมู่</th>
                 <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">SKU</th>
-                {canViewCost && <th className="text-right text-xs font-medium text-rowa-muted px-4 py-3">ต้นทุน</th>}
-                <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3 w-28">สต็อก</th>
-                <th className="text-right text-xs font-medium text-rowa-muted px-6 py-3 w-36">จัดการ</th>
+                {canViewCost && <th className="text-right text-xs font-medium text-rowa-muted px-4 py-3" style={{ minWidth: 90 }}>ต้นทุน</th>}
+                <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3" style={{ minWidth: 110 }}>สต็อก</th>
+                <th className="text-right text-xs font-medium text-rowa-muted px-6 py-3" style={{ minWidth: 130 }}>จัดการ</th>
               </tr>
             </thead>
             <tbody>
@@ -377,7 +377,7 @@ export function ProductsPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-rowa-muted">{product.sku}</td>
                     {canViewCost && <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(product.cost_price)}</td>}
-                    <td className="px-4 py-3 text-center whitespace-nowrap">
+                    <td className="px-4 py-3 text-center" style={{ minWidth: 110 }}>
                       <Badge variant={product.current_stock === 0 ? 'danger' : product.current_stock <= 5 ? 'warning' : 'success'}>
                         {product.current_stock === 0 ? 'หมดสต็อก' : `${product.current_stock} ชิ้น`}
                       </Badge>
