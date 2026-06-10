@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { Plus, Search, Package, Pencil, Trash2, ArrowUp, ArrowDown, Upload, X, Tag } from 'lucide-react'
+import { Plus, Search, Package, Pencil, Trash2, ArrowUp, ArrowDown, Upload, X, Tag, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
@@ -41,18 +41,40 @@ interface ProductForm {
   image_url: string | null
   category_id: string
   platforms: { lazada: PlatformPrice; shopee: PlatformPrice; store: PlatformPrice }
+  variants: Variant[]
+  hasVariants: boolean
+}
+
+interface Variant {
+  id?: string
+  color: string
+  size: string
+  image_url: string | null
+  current_stock?: number
+}
+
+interface VariantStock {
+  id: string
+  product_id: string
+  color: string | null
+  size: string | null
+  image_url: string | null
+  current_stock: number
 }
 
 interface StockAdjForm {
   type: 'in' | 'out' | 'adjustment'
   quantity: string
   note: string
+  variant_id: string
 }
 
 const defaultPlatform = (): PlatformPrice => ({ selling_price: '', discount_percent: '0' })
 const defaultForm = (): ProductForm => ({
   sku: '', name: '', description: '', cost_price: '', image_url: null, category_id: '',
   platforms: { lazada: defaultPlatform(), shopee: defaultPlatform(), store: defaultPlatform() },
+  variants: [],
+  hasVariants: false,
 })
 
 export function ProductsPage() {
@@ -73,8 +95,10 @@ export function ProductsPage() {
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [stockModal, setStockModal] = useState<ProductStock | null>(null)
-  const [stockForm, setStockForm] = useState<StockAdjForm>({ type: 'in', quantity: '', note: '' })
+  const [stockForm, setStockForm] = useState<StockAdjForm>({ type: 'in', quantity: '', note: '', variant_id: '' })
   const [stockFilter, setStockFilter] = useState<'all' | 'out' | 'low'>('all')
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null)
+  const [variantStocks, setVariantStocks] = useState<Record<string, VariantStock[]>>({})
 
   const fetchAll = async () => {
     setLoading(true)
@@ -106,14 +130,27 @@ export function ProductsPage() {
 
   const openCreate = () => { setForm(defaultForm()); setEditId(null); setShowForm(true) }
 
+  const loadVariants = async (productId: string) => {
+    const { data } = await supabase.from('variant_stock').select('*').eq('product_id', productId)
+    setVariantStocks(prev => ({ ...prev, [productId]: data ?? [] }))
+    return data ?? []
+  }
+
   const openEdit = async (p: ProductStock) => {
-    const { data: platforms } = await supabase.from('product_platforms').select('*').eq('product_id', p.id)
+    const [{ data: platforms }, { data: variants }] = await Promise.all([
+      supabase.from('product_platforms').select('*').eq('product_id', p.id),
+      supabase.from('product_variants').select('*').eq('product_id', p.id),
+    ])
     const pf = defaultForm()
     pf.sku = p.sku; pf.name = p.name; pf.cost_price = p.cost_price.toString()
     pf.image_url = p.image_url; pf.category_id = p.category_id ?? ''
     for (const pl of platforms ?? []) {
       const key = pl.platform as 'lazada' | 'shopee' | 'store'
       pf.platforms[key] = { selling_price: pl.selling_price?.toString() ?? '', discount_percent: pl.discount_percent?.toString() ?? '0' }
+    }
+    if (variants && variants.length > 0) {
+      pf.hasVariants = true
+      pf.variants = variants.map(v => ({ id: v.id, color: v.color ?? '', size: v.size ?? '', image_url: v.image_url }))
     }
     setForm(pf); setEditId(p.id); setShowForm(true)
   }
@@ -159,6 +196,19 @@ export function ProductsPage() {
         active: true,
       }, { onConflict: 'product_id,platform' })
     }
+    // Save variants
+    if (form.hasVariants && form.variants.length > 0) {
+      for (const v of form.variants) {
+        if (v.id) {
+          await supabase.from('product_variants').update({ color: v.color || null, size: v.size || null, image_url: v.image_url }).eq('id', v.id)
+        } else {
+          await supabase.from('product_variants').insert({ product_id: productId, color: v.color || null, size: v.size || null, image_url: v.image_url })
+        }
+      }
+    } else if (!form.hasVariants && editId) {
+      // Remove all variants if toggled off
+      await supabase.from('product_variants').delete().eq('product_id', editId)
+    }
     toast.success(editId ? 'แก้ไขสินค้าแล้ว' : 'เพิ่มสินค้าแล้ว')
     setShowForm(false); fetchAll(); setSaving(false)
   }
@@ -177,6 +227,7 @@ export function ProductsPage() {
       product_id: stockModal.id, type: stockForm.type,
       quantity: Math.abs(parseInt(stockForm.quantity)),
       note: stockForm.note || null, created_by: profile!.id,
+      variant_id: stockForm.variant_id || null,
     })
     if (error) { toast.error(error.message); setSaving(false); return }
     toast.success('บันทึกสต็อกแล้ว'); setStockModal(null); fetchAll(); setSaving(false)
@@ -219,7 +270,7 @@ export function ProductsPage() {
               <p className="text-sm font-semibold text-red-700 mb-2">🚨 หมดสต็อก ({outOfStock.length} รายการ)</p>
               <div className="flex flex-wrap gap-2">
                 {outOfStock.map(p => (
-                  <button key={p.id} onClick={() => { setStockModal(p); setStockForm({ type: 'in', quantity: '', note: '' }) }}
+                  <button key={p.id} onClick={() => { setStockModal(p); setStockForm({ type: 'in', quantity: '', note: '', variant_id: '' }) }}
                     className="flex items-center gap-1.5 bg-white border border-red-200 rounded-lg px-3 py-1.5 text-sm hover:border-red-400 transition-colors">
                     <span className="font-medium text-red-700">{p.name}</span>
                     <span className="text-xs text-red-400">({p.sku})</span>
@@ -234,7 +285,7 @@ export function ProductsPage() {
               <p className="text-sm font-semibold text-orange-700 mb-2">⚠️ ใกล้หมด ({lowStock.length} รายการ)</p>
               <div className="flex flex-wrap gap-2">
                 {lowStock.map(p => (
-                  <button key={p.id} onClick={() => { setStockModal(p); setStockForm({ type: 'in', quantity: '', note: '' }) }}
+                  <button key={p.id} onClick={() => { setStockModal(p); setStockForm({ type: 'in', quantity: '', note: '', variant_id: '' }) }}
                     className="flex items-center gap-1.5 bg-white border border-orange-200 rounded-lg px-3 py-1.5 text-sm hover:border-orange-400 transition-colors">
                     <span className="font-medium text-orange-700">{p.name}</span>
                     <span className="text-xs text-orange-400">({p.sku})</span>
@@ -293,7 +344,7 @@ export function ProductsPage() {
             <tbody>
               {filtered.map(product => {
                 const cat = getCategoryById(product.category_id)
-                return (
+                return (<>
                   <tr key={product.id} className="border-b border-gray-50 hover:bg-rowa-bg/30 transition-colors">
                     <td className="px-6 py-3">
                       <div className="flex items-center gap-3">
@@ -319,7 +370,17 @@ export function ProductsPage() {
                     </td>
                     <td className="px-6 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => { setStockModal(product); setStockForm({ type: 'in', quantity: '', note: '' }) }}>สต็อก</Button>
+                        <Button variant="ghost" size="sm" onClick={async () => {
+                          const vs = await loadVariants(product.id)
+                          setStockModal(product)
+                          setStockForm({ type: 'in', quantity: '', note: '', variant_id: vs.length > 0 ? vs[0].id : '' })
+                        }}>สต็อก</Button>
+                        <button onClick={async () => {
+                          if (expandedProductId !== product.id) { await loadVariants(product.id); setExpandedProductId(product.id) }
+                          else setExpandedProductId(null)
+                        }} className="p-1.5 rounded hover:bg-gray-100">
+                          {expandedProductId === product.id ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                        </button>
                         {isAdmin && <>
                           <Button variant="ghost" size="sm" onClick={() => openEdit(product)}><Pencil className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="sm" onClick={() => deleteProduct(product.id)}><Trash2 className="h-4 w-4 text-red-400" /></Button>
@@ -327,7 +388,28 @@ export function ProductsPage() {
                       </div>
                     </td>
                   </tr>
-                )
+                  {expandedProductId === product.id && (
+                    <tr key={`${product.id}-variants`}>
+                      <td colSpan={canViewCost ? 6 : 5} className="px-6 pb-3 bg-gray-50/50">
+                        {(variantStocks[product.id] ?? []).length === 0 ? (
+                          <p className="text-xs text-rowa-muted py-2">ไม่มีตัวเลือกสินค้า (ไม่แยกสี/ไซส์)</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2 py-2">
+                            {variantStocks[product.id].map(v => (
+                              <div key={v.id} className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-sm">
+                                {v.color && <span className="font-medium">{v.color}</span>}
+                                {v.size && <span className="text-rowa-muted">{v.size}</span>}
+                                <Badge variant={v.current_stock === 0 ? 'danger' : v.current_stock <= 5 ? 'warning' : 'success'}>
+                                  {v.current_stock} ชิ้น
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </>)
               })}
             </tbody>
           </table>
@@ -394,6 +476,38 @@ export function ProductsPage() {
               <Input label="ราคาทุน (บาท)" type="number" value={form.cost_price} onChange={e => setForm(f => ({ ...f, cost_price: e.target.value }))} placeholder="0" />
             </div>
 
+            {/* Variants */}
+            <div className="mt-4 border border-gray-100 rounded-xl p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-gray-700">ตัวเลือกสินค้า (สี / ไซส์)</p>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={form.hasVariants}
+                    onChange={e => setForm(f => ({ ...f, hasVariants: e.target.checked, variants: e.target.checked && f.variants.length === 0 ? [{ color: '', size: '', image_url: null }] : f.variants }))}
+                    className="accent-rowa-blue w-4 h-4" />
+                  <span className="text-sm text-gray-600">มีหลายตัวเลือก</span>
+                </label>
+              </div>
+              {form.hasVariants && (
+                <div className="space-y-2">
+                  {form.variants.map((v, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <input className="input flex-1" placeholder="สี เช่น แดง / ฟ้า" value={v.color}
+                        onChange={e => setForm(f => ({ ...f, variants: f.variants.map((x, j) => j === i ? { ...x, color: e.target.value } : x) }))} />
+                      <input className="input flex-1" placeholder="ไซส์ เช่น S / M / L / XL" value={v.size}
+                        onChange={e => setForm(f => ({ ...f, variants: f.variants.map((x, j) => j === i ? { ...x, size: e.target.value } : x) }))} />
+                      <button onClick={async () => {
+                        if (v.id) await supabase.from('product_variants').delete().eq('id', v.id)
+                        setForm(f => ({ ...f, variants: f.variants.filter((_, j) => j !== i) }))
+                      }} className="p-1.5 hover:bg-red-50 rounded"><Trash2 className="h-4 w-4 text-red-400" /></button>
+                    </div>
+                  ))}
+                  <Button size="sm" variant="secondary" onClick={() => setForm(f => ({ ...f, variants: [...f.variants, { color: '', size: '', image_url: null }] }))}>
+                    <Plus className="h-4 w-4" /> เพิ่มตัวเลือก
+                  </Button>
+                </div>
+              )}
+            </div>
+
             {/* Platform pricing */}
             <div className="mt-4">
               <p className="text-sm font-medium text-gray-700 mb-3">ราคาขายแต่ละ Platform</p>
@@ -441,6 +555,19 @@ export function ProductsPage() {
               ))}
             </div>
             <div className="space-y-3">
+              {(variantStocks[stockModal?.id ?? ''] ?? []).length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700">ตัวเลือก (สี/ไซส์)</label>
+                  <select className="input" value={stockForm.variant_id} onChange={e => setStockForm(f => ({ ...f, variant_id: e.target.value }))}>
+                    <option value="">— ไม่ระบุ (รวม) —</option>
+                    {variantStocks[stockModal?.id ?? ''].map(v => (
+                      <option key={v.id} value={v.id}>
+                        {[v.color, v.size].filter(Boolean).join(' / ')} — สต็อก {v.current_stock} ชิ้น
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <Input label="จำนวน" type="number" value={stockForm.quantity} onChange={e => setStockForm(f => ({ ...f, quantity: e.target.value }))} placeholder="0" />
               <Input label="หมายเหตุ" value={stockForm.note} onChange={e => setStockForm(f => ({ ...f, note: e.target.value }))} placeholder="ไม่บังคับ" />
             </div>
