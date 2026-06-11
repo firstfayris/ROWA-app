@@ -67,6 +67,7 @@ interface StockAdjForm {
   quantity: string
   note: string
   variant_id: string
+  movement_date: string
 }
 
 const defaultPlatform = (): PlatformPrice => ({ selling_price: '', discount_percent: '0' })
@@ -95,7 +96,7 @@ export function ProductsPage() {
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [stockModal, setStockModal] = useState<ProductStock | null>(null)
-  const [stockForm, setStockForm] = useState<StockAdjForm>({ type: 'in', quantity: '', note: '', variant_id: '' })
+  const [stockForm, setStockForm] = useState<StockAdjForm>({ type: 'in', quantity: '', note: '', variant_id: '', movement_date: new Date().toISOString().slice(0, 10) })
   const [stockFilter, setStockFilter] = useState<'all' | 'out' | 'low'>('all')
   const [variantStocks, setVariantStocks] = useState<Record<string, VariantStock[]>>({})
 
@@ -229,6 +230,7 @@ export function ProductsPage() {
       quantity: Math.abs(parseInt(stockForm.quantity)),
       note: stockForm.note || null, created_by: profile!.id,
       variant_id: stockForm.variant_id || null,
+      movement_date: stockForm.movement_date || null,
     })
     if (error) { toast.error(error.message); setSaving(false); return }
     toast.success('บันทึกสต็อกแล้ว'); setStockModal(null); fetchAll(); setSaving(false)
@@ -271,7 +273,7 @@ export function ProductsPage() {
               <p className="text-sm font-semibold text-red-700 mb-2">🚨 หมดสต็อก ({outOfStock.length} รายการ)</p>
               <div className="flex flex-wrap gap-2">
                 {outOfStock.map(p => (
-                  <button key={p.id} onClick={() => { setStockModal(p); setStockForm({ type: 'in', quantity: '', note: '', variant_id: '' }) }}
+                  <button key={p.id} onClick={() => { setStockModal(p); setStockForm({ type: 'in', quantity: '', note: '', variant_id: '', movement_date: new Date().toISOString().slice(0, 10) }) }}
                     className="flex items-center gap-1.5 bg-white border border-red-200 rounded-lg px-3 py-1.5 text-sm hover:border-red-400 transition-colors">
                     <span className="font-medium text-red-700">{p.name}</span>
                     <span className="text-xs text-red-400">({p.sku})</span>
@@ -286,7 +288,7 @@ export function ProductsPage() {
               <p className="text-sm font-semibold text-orange-700 mb-2">⚠️ ใกล้หมด ({lowStock.length} รายการ)</p>
               <div className="flex flex-wrap gap-2">
                 {lowStock.map(p => (
-                  <button key={p.id} onClick={() => { setStockModal(p); setStockForm({ type: 'in', quantity: '', note: '', variant_id: '' }) }}
+                  <button key={p.id} onClick={() => { setStockModal(p); setStockForm({ type: 'in', quantity: '', note: '', variant_id: '', movement_date: new Date().toISOString().slice(0, 10) }) }}
                     className="flex items-center gap-1.5 bg-white border border-orange-200 rounded-lg px-3 py-1.5 text-sm hover:border-orange-400 transition-colors">
                     <span className="font-medium text-orange-700">{p.name}</span>
                     <span className="text-xs text-orange-400">({p.sku})</span>
@@ -387,7 +389,7 @@ export function ProductsPage() {
                         <Button variant="ghost" size="sm" style={{ whiteSpace: 'nowrap' }} onClick={() => {
                           setStockModal(product)
                           const vs = variantStocks[product.id] ?? []
-                          setStockForm({ type: 'in', quantity: '', note: '', variant_id: vs.length > 0 ? vs[0].id : '' })
+                          setStockForm({ type: 'in', quantity: '', note: '', variant_id: vs.length > 0 ? vs[0].id : '', movement_date: new Date().toISOString().slice(0, 10) })
                         }}>สต็อก</Button>
                         {isAdmin && <>
                           <Button variant="ghost" size="sm" onClick={() => openEdit(product)}><Pencil className="h-4 w-4" /></Button>
@@ -555,6 +557,10 @@ export function ProductsPage() {
                   </select>
                 </div>
               )}
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-gray-700">วันที่รับ/ตัดสต็อก</label>
+                <input type="date" className="input" value={stockForm.movement_date} onChange={e => setStockForm(f => ({ ...f, movement_date: e.target.value }))} />
+              </div>
               <Input label="จำนวน" type="number" value={stockForm.quantity} onChange={e => setStockForm(f => ({ ...f, quantity: e.target.value }))} placeholder="0" />
               <Input label="หมายเหตุ" value={stockForm.note} onChange={e => setStockForm(f => ({ ...f, note: e.target.value }))} placeholder="ไม่บังคับ" />
             </div>
