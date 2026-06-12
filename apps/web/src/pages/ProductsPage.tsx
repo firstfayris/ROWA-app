@@ -132,6 +132,7 @@ export function ProductsPage() {
   const [bulkQty, setBulkQty] = useState('')
   const [lotFilterBrand, setLotFilterBrand] = useState('')
   const [lotFilterCategory, setLotFilterCategory] = useState('')
+  const [lotSelected, setLotSelected] = useState<Set<string>>(new Set())
 
   // Image hover preview
   const [hoverImg, setHoverImg] = useState<{ url: string; x: number; y: number } | null>(null)
@@ -319,16 +320,22 @@ export function ProductsPage() {
       return { product_id: p.id, product_name: p.name, product_sku: p.sku, category_id: p.category_id, variants, quantities }
     })
     setLotItems(items)
+    setLotSelected(new Set())
     setShowLot(true)
   }
 
   const applyBulkQty = () => {
     if (!bulkQty) return
     setLotItems(items => items.map(item => {
-      const cat = categories.find(c => c.id === item.category_id)
-      const matchBrand = !lotFilterBrand || cat?.brand === lotFilterBrand
-      const matchCat = !lotFilterCategory || item.category_id === lotFilterCategory
-      if (!matchBrand || !matchCat) return item
+      // If any items are checked, only apply to checked items
+      if (lotSelected.size > 0) {
+        if (!lotSelected.has(item.product_id)) return item
+      } else {
+        const cat = categories.find(c => c.id === item.category_id)
+        const matchBrand = !lotFilterBrand || cat?.brand === lotFilterBrand
+        const matchCat = !lotFilterCategory || item.category_id === lotFilterCategory
+        if (!matchBrand || !matchCat) return item
+      }
       return {
         ...item,
         quantities: Object.fromEntries(Object.keys(item.quantities).map(k => [k, bulkQty]))
@@ -720,7 +727,7 @@ export function ProductsPage() {
               <div className="flex gap-2 items-end">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-gray-600">
-                    ใส่จำนวนเท่ากัน{lotFilterBrand || lotFilterCategory ? ' (เฉพาะที่เลือก)' : ' (ทุกรายการ)'}
+                    ใส่จำนวนเท่ากัน{lotSelected.size > 0 ? ` (${lotSelected.size} รายการที่เลือก)` : lotFilterBrand || lotFilterCategory ? ' (เฉพาะที่กรอง)' : ' (ทุกรายการ)'}
                   </label>
                   <input type="number" className="input w-24" placeholder="จำนวน" value={bulkQty} onChange={e => setBulkQty(e.target.value)} />
                 </div>
@@ -736,7 +743,23 @@ export function ProductsPage() {
               <table className="w-full">
                 <thead className="sticky top-0 bg-rowa-bg/80">
                   <tr className="border-b border-gray-100">
-                    <th className="text-left text-xs font-medium text-rowa-muted px-6 py-2">สินค้า</th>
+                    <th className="px-4 py-2 w-8">
+                      <input type="checkbox" className="accent-rowa-blue w-4 h-4"
+                        checked={lotSelected.size > 0 && lotItems.filter(item => {
+                          const cat = categories.find(c => c.id === item.category_id)
+                          return (!lotFilterBrand || cat?.brand === lotFilterBrand) && (!lotFilterCategory || item.category_id === lotFilterCategory)
+                        }).every(item => lotSelected.has(item.product_id))}
+                        onChange={e => {
+                          const visible = lotItems.filter(item => {
+                            const cat = categories.find(c => c.id === item.category_id)
+                            return (!lotFilterBrand || cat?.brand === lotFilterBrand) && (!lotFilterCategory || item.category_id === lotFilterCategory)
+                          })
+                          if (e.target.checked) setLotSelected(new Set(visible.map(i => i.product_id)))
+                          else setLotSelected(new Set())
+                        }}
+                      />
+                    </th>
+                    <th className="text-left text-xs font-medium text-rowa-muted px-2 py-2">สินค้า</th>
                     <th className="text-left text-xs font-medium text-rowa-muted px-4 py-2">ตัวเลือก</th>
                     <th className="text-center text-xs font-medium text-rowa-muted px-4 py-2 w-28">จำนวนรับเข้า</th>
                   </tr>
@@ -751,10 +774,21 @@ export function ProductsPage() {
                     const updateQty = (key: string, val: string) =>
                       setLotItems(its => its.map(it => it.product_id === item.product_id
                         ? { ...it, quantities: { ...it.quantities, [key]: val } } : it))
+                    const isChecked = lotSelected.has(item.product_id)
+                    const toggleCheck = () => setLotSelected(prev => {
+                      const next = new Set(prev)
+                      if (next.has(item.product_id)) next.delete(item.product_id)
+                      else next.add(item.product_id)
+                      return next
+                    })
+
                     if (item.variants.length === 0) {
                       return (
-                        <tr key={item.product_id} className="border-b border-gray-50">
-                          <td className="px-6 py-2">
+                        <tr key={item.product_id} className={`border-b border-gray-50 ${isChecked ? 'bg-rowa-blue/5' : ''}`}>
+                          <td className="px-4 py-2">
+                            <input type="checkbox" className="accent-rowa-blue w-4 h-4" checked={isChecked} onChange={toggleCheck} />
+                          </td>
+                          <td className="px-2 py-2">
                             <p className="text-sm font-medium">{item.product_name}</p>
                             <p className="text-xs text-rowa-muted font-mono">{item.product_sku}</p>
                           </td>
@@ -768,8 +802,11 @@ export function ProductsPage() {
                       )
                     }
                     return item.variants.map((v, vi) => (
-                      <tr key={`${item.product_id}-${v.id}`} className="border-b border-gray-50">
-                        <td className="px-6 py-2">
+                      <tr key={`${item.product_id}-${v.id}`} className={`border-b border-gray-50 ${isChecked ? 'bg-rowa-blue/5' : ''}`}>
+                        <td className="px-4 py-2">
+                          {vi === 0 && <input type="checkbox" className="accent-rowa-blue w-4 h-4" checked={isChecked} onChange={toggleCheck} />}
+                        </td>
+                        <td className="px-2 py-2">
                           {vi === 0 && <>
                             <p className="text-sm font-medium">{item.product_name}</p>
                             <p className="text-xs text-rowa-muted font-mono">{item.product_sku}</p>
