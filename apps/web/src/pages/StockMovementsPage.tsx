@@ -165,7 +165,7 @@ export function StockMovementsPage() {
         </div>
         <div className="card">
           <p className="text-xs text-rowa-muted">เบิกออกรวม</p>
-          <p className="text-2xl font-bold text-red-500 mt-1">-{totalOut.toLocaleString()}</p>
+          <p className="text-2xl font-bold text-red-500 mt-1">{totalOut > 0 ? `-${totalOut.toLocaleString()}` : '0'}</p>
         </div>
         <div className="card">
           <p className="text-xs text-rowa-muted">ยอดสุทธิ</p>
