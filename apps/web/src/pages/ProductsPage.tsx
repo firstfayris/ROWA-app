@@ -73,10 +73,9 @@ interface StockAdjForm {
 interface LotItem {
   product_id: string
   product_name: string
+  category_id: string | null
   variants: { id: string; label: string }[]
-  // variant_id -> qty
   quantities: Record<string, string>
-  // no variants: use '' key
 }
 
 interface StockMovement {
@@ -127,6 +126,8 @@ export function ProductsPage() {
   const [lotItems, setLotItems] = useState<LotItem[]>([])
   const [lotSaving, setLotSaving] = useState(false)
   const [bulkQty, setBulkQty] = useState('')
+  const [lotFilterBrand, setLotFilterBrand] = useState('')
+  const [lotFilterCategory, setLotFilterCategory] = useState('')
 
   // History
   const [historyProduct, setHistoryProduct] = useState<ProductStock | null>(null)
@@ -277,14 +278,15 @@ export function ProductsPage() {
     setLotDate(new Date().toISOString().slice(0, 10))
     setLotNote('')
     setBulkQty('')
-    // build lot items from products + variants
+    setLotFilterBrand('')
+    setLotFilterCategory('')
     const items: LotItem[] = products.map(p => {
       const vs = variantStocks[p.id] ?? []
       const variants = vs.map(v => ({ id: v.id, label: [v.color, v.size].filter(Boolean).join(' / ') }))
       const quantities: Record<string, string> = {}
       if (variants.length > 0) variants.forEach(v => { quantities[v.id] = '' })
       else quantities[''] = ''
-      return { product_id: p.id, product_name: p.name, variants, quantities }
+      return { product_id: p.id, product_name: p.name, category_id: p.category_id, variants, quantities }
     })
     setLotItems(items)
     setShowLot(true)
@@ -292,10 +294,16 @@ export function ProductsPage() {
 
   const applyBulkQty = () => {
     if (!bulkQty) return
-    setLotItems(items => items.map(item => ({
-      ...item,
-      quantities: Object.fromEntries(Object.keys(item.quantities).map(k => [k, bulkQty]))
-    })))
+    setLotItems(items => items.map(item => {
+      const cat = categories.find(c => c.id === item.category_id)
+      const matchBrand = !lotFilterBrand || cat?.brand === lotFilterBrand
+      const matchCat = !lotFilterCategory || item.category_id === lotFilterCategory
+      if (!matchBrand || !matchCat) return item
+      return {
+        ...item,
+        quantities: Object.fromEntries(Object.keys(item.quantities).map(k => [k, bulkQty]))
+      }
+    }))
   }
 
   const saveLot = async () => {
@@ -647,7 +655,7 @@ export function ProductsPage() {
               <button onClick={() => setShowLot(false)}><X className="h-5 w-5 text-gray-400" /></button>
             </div>
 
-            {/* Controls */}
+            {/* Controls row 1: date + note */}
             <div className="px-6 py-3 border-b border-gray-100 flex flex-wrap gap-3 items-end">
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-gray-600">วันที่รับสินค้า</label>
@@ -657,13 +665,38 @@ export function ProductsPage() {
                 <label className="text-xs font-medium text-gray-600">หมายเหตุ / ชื่อล็อต</label>
                 <input className="input" placeholder="เช่น ล็อต เม.ย. 68" value={lotNote} onChange={e => setLotNote(e.target.value)} />
               </div>
+            </div>
+
+            {/* Controls row 2: filter + bulk qty */}
+            <div className="px-6 py-3 border-b border-gray-100 bg-rowa-bg/40 flex flex-wrap gap-3 items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-600">เลือกแบรนด์</label>
+                <select className="input w-36" value={lotFilterBrand} onChange={e => { setLotFilterBrand(e.target.value); setLotFilterCategory('') }}>
+                  <option value="">ทุกแบรนด์</option>
+                  {brands.map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-600">เลือกหมวดหมู่</label>
+                <select className="input w-44" value={lotFilterCategory} onChange={e => setLotFilterCategory(e.target.value)}>
+                  <option value="">ทุกหมวดหมู่</option>
+                  {categories.filter(c => !lotFilterBrand || c.brand === lotFilterBrand).map(c => (
+                    <option key={c.id} value={c.id}>{c.brand} — {c.name}</option>
+                  ))}
+                </select>
+              </div>
               <div className="flex gap-2 items-end">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-600">ใส่จำนวนเท่ากันทุกรายการ</label>
+                  <label className="text-xs font-medium text-gray-600">
+                    ใส่จำนวนเท่ากัน{lotFilterBrand || lotFilterCategory ? ' (เฉพาะที่เลือก)' : ' (ทุกรายการ)'}
+                  </label>
                   <input type="number" className="input w-24" placeholder="จำนวน" value={bulkQty} onChange={e => setBulkQty(e.target.value)} />
                 </div>
                 <Button variant="secondary" size="sm" onClick={applyBulkQty}>ใส่ทั้งหมด</Button>
               </div>
+              {(lotFilterBrand || lotFilterCategory) && (
+                <button className="text-xs text-rowa-muted hover:text-rowa-text self-end pb-1.5" onClick={() => { setLotFilterBrand(''); setLotFilterCategory('') }}>ล้าง</button>
+              )}
             </div>
 
             {/* Table */}
@@ -677,7 +710,15 @@ export function ProductsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {lotItems.map((item, idx) => {
+                  {lotItems.filter(item => {
+                    const cat = categories.find(c => c.id === item.category_id)
+                    const matchBrand = !lotFilterBrand || cat?.brand === lotFilterBrand
+                    const matchCat = !lotFilterCategory || item.category_id === lotFilterCategory
+                    return matchBrand && matchCat
+                  }).map(item => {
+                    const updateQty = (key: string, val: string) =>
+                      setLotItems(its => its.map(it => it.product_id === item.product_id
+                        ? { ...it, quantities: { ...it.quantities, [key]: val } } : it))
                     if (item.variants.length === 0) {
                       return (
                         <tr key={item.product_id} className="border-b border-gray-50">
@@ -686,7 +727,7 @@ export function ProductsPage() {
                           <td className="px-4 py-2">
                             <input type="number" min="0" placeholder="0" className="input text-center w-20 mx-auto block"
                               value={item.quantities['']}
-                              onChange={e => setLotItems(its => its.map((it, i) => i === idx ? { ...it, quantities: { '': e.target.value } } : it))} />
+                              onChange={e => updateQty('', e.target.value)} />
                           </td>
                         </tr>
                       )
@@ -698,7 +739,7 @@ export function ProductsPage() {
                         <td className="px-4 py-2">
                           <input type="number" min="0" placeholder="0" className="input text-center w-20 mx-auto block"
                             value={item.quantities[v.id]}
-                            onChange={e => setLotItems(its => its.map((it, i) => i === idx ? { ...it, quantities: { ...it.quantities, [v.id]: e.target.value } } : it))} />
+                            onChange={e => updateQty(v.id, e.target.value)} />
                         </td>
                       </tr>
                     ))
