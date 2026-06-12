@@ -118,6 +118,8 @@ export function ProductsPage() {
   const [stockModal, setStockModal] = useState<ProductStock | null>(null)
   const [stockForm, setStockForm] = useState<StockAdjForm>({ type: 'in', quantity: '', note: '', variant_id: '', movement_date: new Date().toISOString().slice(0, 10) })
   const [stockFilter, setStockFilter] = useState<'all' | 'out' | 'low'>('all')
+  const [sortKey, setSortKey] = useState<'name' | 'cost_price' | 'current_stock'>('name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [variantStocks, setVariantStocks] = useState<Record<string, VariantStock[]>>({})
 
   // Lot receive
@@ -161,15 +163,31 @@ export function ProductsPage() {
   const outOfStock = products.filter(p => p.current_stock === 0)
   const lowStock = products.filter(p => p.current_stock > 0 && p.current_stock <= 5)
 
-  const filtered = products.filter(p => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase())
-    const matchCat = !filterCategory || p.category_id === filterCategory
-    const matchBrand = !filterBrand || categories.find(c => c.id === p.category_id)?.brand === filterBrand
-    const matchStock = stockFilter === 'all' || (stockFilter === 'out' && p.current_stock === 0) || (stockFilter === 'low' && p.current_stock > 0 && p.current_stock <= 5)
-    return matchSearch && matchCat && matchBrand && matchStock
-  })
+  type SortKey = 'name' | 'cost_price' | 'current_stock'
+  type SortDir = 'asc' | 'desc'
+
+  const filtered = products
+    .filter(p => {
+      const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase())
+      const matchCat = !filterCategory || p.category_id === filterCategory
+      const matchBrand = !filterBrand || categories.find(c => c.id === p.category_id)?.brand === filterBrand
+      const matchStock = stockFilter === 'all' || (stockFilter === 'out' && p.current_stock === 0) || (stockFilter === 'low' && p.current_stock > 0 && p.current_stock <= 5)
+      return matchSearch && matchCat && matchBrand && matchStock
+    })
+    .sort((a, b) => {
+      if (sortKey === 'name') return sortDir === 'asc' ? a.name.localeCompare(b.name, 'th') : b.name.localeCompare(a.name, 'th')
+      if (sortKey === 'cost_price') return sortDir === 'asc' ? a.cost_price - b.cost_price : b.cost_price - a.cost_price
+      if (sortKey === 'current_stock') return sortDir === 'asc' ? a.current_stock - b.current_stock : b.current_stock - a.current_stock
+      return 0
+    })
 
   const getCategoryById = (id: string | null) => categories.find(c => c.id === id)
+
+  const handleSort = (key: 'name' | 'cost_price' | 'current_stock') => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
+  const sortIcon = (key: string) => sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'
 
   const openCreate = () => { setForm(defaultForm()); setEditId(null); setShowForm(true) }
 
@@ -436,11 +454,19 @@ export function ProductsPage() {
           <table className="w-full" style={{ minWidth: 750 }}>
             <thead>
               <tr className="border-b border-gray-100 bg-rowa-bg/50">
-                <th className="text-left text-xs font-medium text-rowa-muted px-6 py-3" style={{ whiteSpace: 'nowrap' }}>สินค้า</th>
+                <th className="text-left text-xs font-medium text-rowa-muted px-6 py-3 cursor-pointer select-none hover:text-rowa-blue" style={{ whiteSpace: 'nowrap' }} onClick={() => handleSort('name')}>
+                  สินค้า{sortIcon('name')}
+                </th>
                 <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap' }}>หมวดหมู่</th>
                 <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap' }}>SKU</th>
-                {canViewCost && <th className="text-right text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap', minWidth: 90 }}>ต้นทุน</th>}
-                <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap', minWidth: 110 }}>สต็อก</th>
+                {canViewCost && (
+                  <th className="text-right text-xs font-medium text-rowa-muted px-4 py-3 cursor-pointer select-none hover:text-rowa-blue" style={{ whiteSpace: 'nowrap', minWidth: 90 }} onClick={() => handleSort('cost_price')}>
+                    ต้นทุน{sortIcon('cost_price')}
+                  </th>
+                )}
+                <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3 cursor-pointer select-none hover:text-rowa-blue" style={{ whiteSpace: 'nowrap', minWidth: 110 }} onClick={() => handleSort('current_stock')}>
+                  สต็อก{sortIcon('current_stock')}
+                </th>
                 <th className="text-right text-xs font-medium text-rowa-muted px-6 py-3" style={{ whiteSpace: 'nowrap', minWidth: 130 }}>จัดการ</th>
               </tr>
             </thead>
