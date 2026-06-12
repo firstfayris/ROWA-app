@@ -47,9 +47,11 @@ interface SaleItem {
   discount: number      // baht discount per order line
   note: string
   cost_price: number
+  filterBrand: string
+  filterCategory: string
 }
 
-const emptyItem = (): SaleItem => ({ product_id: '', variant_id: '', quantity: 1, unit_price: 0, discount: 0, note: '', cost_price: 0 })
+const emptyItem = (): SaleItem => ({ product_id: '', variant_id: '', quantity: 1, unit_price: 0, discount: 0, note: '', cost_price: 0, filterBrand: '', filterCategory: '' })
 
 const statusLabel: Record<OrderStatus, string> = {
   pending: 'รอดำเนินการ',
@@ -92,8 +94,6 @@ export function OrdersPage() {
   // Products + categories
   const [products, setProducts] = useState<ProductOption[]>([])
   const [categories, setCategories] = useState<Category[]>([])
-  const [filterBrand, setFilterBrand] = useState('')
-  const [filterCategory, setFilterCategory] = useState('')
 
   const fetchOrders = async () => {
     setLoading(true)
@@ -140,13 +140,13 @@ export function OrdersPage() {
 
   const brands = [...new Set(categories.map(c => c.brand))].filter(Boolean)
 
-  // Filtered product list for dropdown
-  const visibleProducts = products.filter(p => {
-    const cat = categories.find(c => c.id === p.category_id)
-    if (filterBrand && cat?.brand !== filterBrand) return false
-    if (filterCategory && p.category_id !== filterCategory) return false
-    return true
-  })
+  const visibleProducts = (filterBrand: string, filterCategory: string) =>
+    products.filter(p => {
+      const cat = categories.find(c => c.id === p.category_id)
+      if (filterBrand && cat?.brand !== filterBrand) return false
+      if (filterCategory && p.category_id !== filterCategory) return false
+      return true
+    })
 
   const filtered = orders.filter(o => {
     if (platformFilter !== 'all' && o.platform !== platformFilter) return false
@@ -183,7 +183,6 @@ export function OrdersPage() {
     setPaymentDate(new Date().toISOString().split('T')[0])
     setSlipFile(null); setSlipPreview(null)
     setSaleItems([emptyItem()]); setSaleNote('')
-    setFilterBrand(''); setFilterCategory('')
     setShowSaleModal(true)
   }
 
@@ -381,35 +380,12 @@ export function OrdersPage() {
                 />
               </div>
 
-              {/* Product filter bar */}
-              <div className="flex gap-2 bg-rowa-bg/50 rounded-xl p-3 items-end">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-600">กรองแบรนด์</label>
-                  <select className="input w-32 text-sm" value={filterBrand}
-                    onChange={e => { setFilterBrand(e.target.value); setFilterCategory('') }}>
-                    <option value="">ทุกแบรนด์</option>
-                    {brands.map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1 flex-1">
-                  <label className="text-xs font-medium text-gray-600">กรองหมวดหมู่</label>
-                  <select className="input text-sm" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
-                    <option value="">ทุกหมวดหมู่</option>
-                    {categories.filter(c => !filterBrand || c.brand === filterBrand).map(c => (
-                      <option key={c.id} value={c.id}>{c.brand} — {c.name}</option>
-                    ))}
-                  </select>
-                </div>
-                {(filterBrand || filterCategory) && (
-                  <button className="text-xs text-rowa-muted hover:text-rowa-text pb-1.5" onClick={() => { setFilterBrand(''); setFilterCategory('') }}>ล้าง</button>
-                )}
-              </div>
-
               {/* Sale items */}
               <div className="space-y-3">
                 {saleItems.map((item, i) => {
                   const prod = products.find(p => p.id === item.product_id)
                   const autoPrice = prod?.prices[salePlatform] ?? null
+                  const itemProducts = visibleProducts(item.filterBrand, item.filterCategory)
                   return (
                     <div key={i} className="border border-gray-100 rounded-xl p-3 space-y-2">
                       <div className="flex items-center justify-between">
@@ -422,12 +398,28 @@ export function OrdersPage() {
                         )}
                       </div>
 
+                      {/* Per-item brand/category filter */}
+                      <div className="flex gap-2">
+                        <select className="input flex-1 text-xs" value={item.filterBrand}
+                          onChange={e => updateItem(i, { filterBrand: e.target.value, filterCategory: '', product_id: '', unit_price: 0 })}>
+                          <option value="">ทุกแบรนด์</option>
+                          {brands.map(b => <option key={b} value={b}>{b}</option>)}
+                        </select>
+                        <select className="input flex-1 text-xs" value={item.filterCategory}
+                          onChange={e => updateItem(i, { filterCategory: e.target.value, product_id: '', unit_price: 0 })}>
+                          <option value="">ทุกหมวดหมู่</option>
+                          {categories.filter(c => !item.filterBrand || c.brand === item.filterBrand).map(c => (
+                            <option key={c.id} value={c.id}>{c.brand} — {c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
                       {/* Product select */}
                       <div>
                         <label className="text-xs font-medium text-gray-700 block mb-1">สินค้า</label>
                         <select className="input" value={item.product_id} onChange={e => selectProduct(i, e.target.value)}>
                           <option value="">-- เลือกสินค้า --</option>
-                          {visibleProducts.map(p => (
+                          {itemProducts.map(p => (
                             <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
                           ))}
                         </select>
