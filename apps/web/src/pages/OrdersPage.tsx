@@ -353,14 +353,28 @@ export function OrdersPage() {
                     )}
                     {isAdmin && (
                       <div className="mt-3 flex justify-end gap-2">
-                        {(['confirmed', 'shipped', 'delivered', 'cancelled'] as OrderStatus[]).map(s => (
+                        {/* Store orders: only cancelled; other platforms: full flow */}
+                        {(order.platform === 'store'
+                          ? (['cancelled'] as OrderStatus[])
+                          : (['confirmed', 'shipped', 'delivered', 'cancelled'] as OrderStatus[])
+                        ).map(s => (
                           order.status !== s && (
-                            <Button key={s} variant="secondary" size="sm" onClick={async () => {
+                            <Button key={s} variant={s === 'cancelled' ? 'danger' : 'secondary'} size="sm" onClick={async () => {
                               await supabase.from('orders').update({ status: s }).eq('id', order.id)
                               toast.success('อัปเดตสถานะแล้ว'); fetchOrders()
                             }}>{statusLabel[s]}</Button>
                           )
                         ))}
+                        <Button variant="ghost" size="sm"
+                          onClick={async () => {
+                            if (!confirm('ต้องการลบคำสั่งซื้อนี้? รายการสต็อกที่ตัดออกไปจะไม่ถูกคืน')) return
+                            await supabase.from('order_items').delete().eq('order_id', order.id)
+                            await supabase.from('orders').delete().eq('id', order.id)
+                            toast.success('ลบคำสั่งซื้อแล้ว'); fetchOrders()
+                          }}
+                          className="text-gray-300 hover:text-red-500 hover:bg-red-50">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     )}
                   </div>
