@@ -265,11 +265,11 @@ export function OrdersPage() {
       })
     ))
     const stockError = stockResults.find(r => r.error)?.error
-    if (stockError) toast.error(`บันทึกการขายแล้ว แต่ตัดสต็อกไม่สำเร็จ: ${stockError.message}`)
+    if (stockError) toast.error(`ตัดสต็อกไม่สำเร็จ: ${stockError.message}`)
     else toast.success('บันทึกการขายและตัดสต็อกแล้ว')
 
+    await fetchOrders()   // โหลดข้อมูลก่อน แล้วค่อยปิด modal
     setShowSaleModal(false)
-    await fetchOrders()
     setSaving(false)
   }
 
