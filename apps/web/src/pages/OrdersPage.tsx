@@ -30,13 +30,21 @@ interface CustomerGroup {
   discount_percent: number
 }
 
+interface ProductVariant {
+  id: string
+  color: string | null
+  size: string | null
+  current_stock: number
+}
+
 interface ProductOption {
   id: string
   name: string
   sku: string
   cost_price: number
   category_id: string | null
-  prices: Record<Platform, number | null> // per-platform selling price after discount
+  prices: Record<Platform, number | null>
+  variants: ProductVariant[]
 }
 
 interface Category {
@@ -116,22 +124,30 @@ export function OrdersPage() {
   }
 
   const fetchProducts = async () => {
-    const [{ data: prods }, { data: cats }, { data: platforms }, { data: groups }] = await Promise.all([
+    const [{ data: prods }, { data: cats }, { data: platforms }, { data: groups }, { data: variants }] = await Promise.all([
       supabase.from('products').select('id, name, sku, cost_price, category_id').order('name'),
       supabase.from('categories').select('id, name, brand').order('brand,name'),
       supabase.from('product_platforms').select('product_id, platform, selling_price, discount_percent'),
       supabase.from('customer_groups').select('id, name, discount_percent').eq('active', true).order('name'),
+      supabase.from('product_variants').select('id, product_id, color, size'),
     ])
     setCustomerGroups(groups ?? [])
     setCategories(cats ?? [])
 
-    // Build price map per product per platform
     const priceMap: Record<string, Record<string, number | null>> = {}
     for (const pp of platforms ?? []) {
       if (!priceMap[pp.product_id]) priceMap[pp.product_id] = {}
       const disc = pp.discount_percent ?? 0
       priceMap[pp.product_id][pp.platform] = pp.selling_price * (1 - disc / 100)
     }
+
+    console.log('[DEBUG] variants raw:', variants)
+    const variantMap: Record<string, ProductVariant[]> = {}
+    for (const v of variants ?? []) {
+      if (!variantMap[v.product_id]) variantMap[v.product_id] = []
+      variantMap[v.product_id].push({ id: v.id, color: v.color, size: v.size, current_stock: 0 })
+    }
+    console.log('[DEBUG] variantMap:', variantMap)
 
     setProducts((prods ?? []).map((p: any) => ({
       id: p.id,
@@ -144,6 +160,7 @@ export function OrdersPage() {
         lazada: priceMap[p.id]?.['lazada'] ?? null,
         shopee: priceMap[p.id]?.['shopee'] ?? null,
       },
+      variants: variantMap[p.id] ?? [],
     })))
   }
 
@@ -174,9 +191,9 @@ export function OrdersPage() {
 
   const selectProduct = (index: number, productId: string) => {
     const p = products.find(x => x.id === productId)
-    if (!p) { updateItem(index, { product_id: '', unit_price: 0, cost_price: 0 }); return }
+    if (!p) { updateItem(index, { product_id: '', variant_id: '', unit_price: 0, cost_price: 0 }); return }
     const price = p.prices[salePlatform] ?? 0
-    updateItem(index, { product_id: productId, unit_price: price, cost_price: p.cost_price })
+    updateItem(index, { product_id: productId, variant_id: '', unit_price: price, cost_price: p.cost_price })
   }
 
   // Re-fill prices when platform changes
@@ -257,6 +274,7 @@ export function OrdersPage() {
     const stockResults = await Promise.all(validItems.map(i =>
       supabase.from('stock_movements').insert({
         product_id: i.product_id,
+        variant_id: i.variant_id || null,
         type: 'out',
         quantity: i.quantity,
         note: `ขาย${platformLabel[salePlatform]}${saleOrderId ? ' #' + saleOrderId : ''}`,
@@ -515,6 +533,23 @@ export function OrdersPage() {
                           </p>
                         )}
                       </div>
+
+                      {/* Variant selector */}
+                      {prod && prod.variants.length > 0 && (
+                        <div>
+                          <label className="text-xs font-medium text-gray-700 block mb-1">ตัวเลือก (สี / ไซส์)</label>
+                          <select className="input" value={item.variant_id}
+                            onChange={e => updateItem(i, { variant_id: e.target.value })}>
+                            <option value="">-- เลือกตัวเลือก --</option>
+                            {prod.variants.map(v => {
+                              const label = [v.color, v.size].filter(Boolean).join(' / ') || `ตัวเลือก ${v.id.slice(0, 6)}`
+                              return (
+                                <option key={v.id} value={v.id}>{label}</option>
+                              )
+                            })}
+                          </select>
+                        </div>
+                      )}
 
                       {/* Qty + Price + Discount */}
                       <div className="grid grid-cols-3 gap-2">
