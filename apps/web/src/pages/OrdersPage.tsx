@@ -24,6 +24,12 @@ interface OrderRow {
   order_items?: { id: string; quantity: number; unit_price: number; product?: { name: string } }[]
 }
 
+interface CustomerGroup {
+  id: string
+  name: string
+  discount_percent: number
+}
+
 interface ProductOption {
   id: string
   name: string
@@ -91,9 +97,11 @@ export function OrdersPage() {
   const [saleNote, setSaleNote] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // Products + categories
+  // Products + categories + customer groups
   const [products, setProducts] = useState<ProductOption[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [customerGroups, setCustomerGroups] = useState<CustomerGroup[]>([])
+  const [selectedGroupId, setSelectedGroupId] = useState('')
 
   const fetchOrders = async () => {
     setLoading(true)
@@ -107,11 +115,13 @@ export function OrdersPage() {
   }
 
   const fetchProducts = async () => {
-    const [{ data: prods }, { data: cats }, { data: platforms }] = await Promise.all([
+    const [{ data: prods }, { data: cats }, { data: platforms }, { data: groups }] = await Promise.all([
       supabase.from('products').select('id, name, sku, cost_price, category_id').order('name'),
       supabase.from('categories').select('id, name, brand').order('brand,name'),
       supabase.from('product_platforms').select('product_id, platform, selling_price, discount_percent'),
+      supabase.from('customer_groups').select('id, name, discount_percent').eq('active', true).order('name'),
     ])
+    setCustomerGroups(groups ?? [])
     setCategories(cats ?? [])
 
     // Build price map per product per platform
@@ -178,11 +188,24 @@ export function OrdersPage() {
     }))
   }
 
+  const applyGroupDiscount = (groupId: string) => {
+    setSelectedGroupId(groupId)
+    const group = customerGroups.find(g => g.id === groupId)
+    setSaleItems(items => items.map(item => {
+      if (!item.product_id) return { ...item, discount: 0 }
+      const discountAmt = group
+        ? Math.round(item.unit_price * item.quantity * group.discount_percent / 100)
+        : 0
+      return { ...item, discount: discountAmt }
+    }))
+  }
+
   const openModal = () => {
     setSalePlatform('store'); setSaleOrderId(''); setPaymentMethod('cash')
     setPaymentDate(new Date().toISOString().split('T')[0])
     setSlipFile(null); setSlipPreview(null)
     setSaleItems([emptyItem()]); setSaleNote('')
+    setSelectedGroupId('')
     setShowSaleModal(true)
   }
 
@@ -379,6 +402,32 @@ export function OrdersPage() {
                   value={saleOrderId} onChange={e => setSaleOrderId(e.target.value)}
                 />
               </div>
+
+              {/* Customer group discount */}
+              {customerGroups.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700">กลุ่มลูกค้า (ส่วนลดพิเศษ)</label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => applyGroupDiscount('')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${!selectedGroupId ? 'bg-rowa-blue text-white border-rowa-blue' : 'bg-white text-gray-500 border-gray-200 hover:border-rowa-blue'}`}>
+                      ลูกค้าทั่วไป
+                    </button>
+                    {customerGroups.map(g => (
+                      <button key={g.id}
+                        onClick={() => applyGroupDiscount(g.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${selectedGroupId === g.id ? 'bg-rowa-pink text-white border-rowa-pink' : 'bg-white text-gray-500 border-gray-200 hover:border-rowa-pink'}`}>
+                        {g.name} (-{g.discount_percent}%)
+                      </button>
+                    ))}
+                  </div>
+                  {selectedGroupId && (
+                    <p className="text-xs text-rowa-pink">
+                      ✓ ใช้ส่วนลด {customerGroups.find(g => g.id === selectedGroupId)?.discount_percent}% — ส่วนลดถูกคำนวณและใส่ในแต่ละรายการแล้ว (ปรับได้)
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Sale items */}
               <div className="space-y-3">
