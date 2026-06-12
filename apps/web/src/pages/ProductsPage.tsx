@@ -380,8 +380,8 @@ export function ProductsPage() {
         ))}
       </div>
 
-      {/* Alert: out of stock */}
-      {(outOfStock.length > 0 || lowStock.length > 0) && (
+      {/* Alert: out of stock only */}
+      {outOfStock.length > 0 && (
         <div className="space-y-2">
           {outOfStock.length > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
@@ -393,21 +393,6 @@ export function ProductsPage() {
                     <span className="font-medium text-red-700">{p.name}</span>
                     <span className="text-xs text-red-400">({p.sku})</span>
                     <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">+ เติม</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {lowStock.length > 0 && (
-            <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
-              <p className="text-sm font-semibold text-orange-700 mb-2">⚠️ ใกล้หมด ({lowStock.length} รายการ)</p>
-              <div className="flex flex-wrap gap-2">
-                {lowStock.map(p => (
-                  <button key={p.id} onClick={() => { setStockModal(p); setStockForm({ type: 'in', quantity: '', note: '', variant_id: '', movement_date: new Date().toISOString().slice(0, 10) }) }}
-                    className="flex items-center gap-1.5 bg-white border border-orange-200 rounded-lg px-3 py-1.5 text-sm hover:border-orange-400 transition-colors">
-                    <span className="font-medium text-orange-700">{p.name}</span>
-                    <span className="text-xs text-orange-400">({p.sku})</span>
-                    <span className="text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">{p.current_stock} ชิ้น</span>
                   </button>
                 ))}
               </div>
