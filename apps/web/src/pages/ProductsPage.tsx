@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { Plus, Search, Package, Pencil, Trash2, ArrowUp, ArrowDown, Upload, X, Tag } from 'lucide-react'
+import { Plus, Search, Package, Pencil, Trash2, ArrowUp, ArrowDown, Upload, X, Tag, History, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
@@ -70,6 +70,26 @@ interface StockAdjForm {
   movement_date: string
 }
 
+interface LotItem {
+  product_id: string
+  product_name: string
+  variants: { id: string; label: string }[]
+  // variant_id -> qty
+  quantities: Record<string, string>
+  // no variants: use '' key
+}
+
+interface StockMovement {
+  id: string
+  type: string
+  quantity: number
+  note: string | null
+  movement_date: string | null
+  created_at: string
+  variant_color: string | null
+  variant_size: string | null
+}
+
 const defaultPlatform = (): PlatformPrice => ({ selling_price: '', discount_percent: '0' })
 const defaultForm = (): ProductForm => ({
   sku: '', name: '', description: '', cost_price: '', image_url: null, category_id: '',
@@ -99,6 +119,19 @@ export function ProductsPage() {
   const [stockForm, setStockForm] = useState<StockAdjForm>({ type: 'in', quantity: '', note: '', variant_id: '', movement_date: new Date().toISOString().slice(0, 10) })
   const [stockFilter, setStockFilter] = useState<'all' | 'out' | 'low'>('all')
   const [variantStocks, setVariantStocks] = useState<Record<string, VariantStock[]>>({})
+
+  // Lot receive
+  const [showLot, setShowLot] = useState(false)
+  const [lotDate, setLotDate] = useState(new Date().toISOString().slice(0, 10))
+  const [lotNote, setLotNote] = useState('')
+  const [lotItems, setLotItems] = useState<LotItem[]>([])
+  const [lotSaving, setLotSaving] = useState(false)
+  const [bulkQty, setBulkQty] = useState('')
+
+  // History
+  const [historyProduct, setHistoryProduct] = useState<ProductStock | null>(null)
+  const [historyItems, setHistoryItems] = useState<StockMovement[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   const fetchAll = async () => {
     setLoading(true)
@@ -239,6 +272,76 @@ export function ProductsPage() {
   const setPlatform = (platform: 'lazada' | 'shopee' | 'store', field: keyof PlatformPrice, value: string) =>
     setForm(f => ({ ...f, platforms: { ...f.platforms, [platform]: { ...f.platforms[platform], [field]: value } } }))
 
+  // ---- LOT RECEIVE ----
+  const openLot = async () => {
+    setLotDate(new Date().toISOString().slice(0, 10))
+    setLotNote('')
+    setBulkQty('')
+    // build lot items from products + variants
+    const items: LotItem[] = products.map(p => {
+      const vs = variantStocks[p.id] ?? []
+      const variants = vs.map(v => ({ id: v.id, label: [v.color, v.size].filter(Boolean).join(' / ') }))
+      const quantities: Record<string, string> = {}
+      if (variants.length > 0) variants.forEach(v => { quantities[v.id] = '' })
+      else quantities[''] = ''
+      return { product_id: p.id, product_name: p.name, variants, quantities }
+    })
+    setLotItems(items)
+    setShowLot(true)
+  }
+
+  const applyBulkQty = () => {
+    if (!bulkQty) return
+    setLotItems(items => items.map(item => ({
+      ...item,
+      quantities: Object.fromEntries(Object.keys(item.quantities).map(k => [k, bulkQty]))
+    })))
+  }
+
+  const saveLot = async () => {
+    const movements = lotItems.flatMap(item =>
+      Object.entries(item.quantities)
+        .filter(([, qty]) => qty && parseInt(qty) > 0)
+        .map(([variantId, qty]) => ({
+          product_id: item.product_id,
+          variant_id: variantId || null,
+          type: 'in' as const,
+          quantity: parseInt(qty),
+          note: lotNote || null,
+          movement_date: lotDate,
+          created_by: profile!.id,
+        }))
+    )
+    if (movements.length === 0) return toast.error('ยังไม่ได้ใส่จำนวนสินค้า')
+    setLotSaving(true)
+    const { error } = await supabase.from('stock_movements').insert(movements)
+    if (error) { toast.error(error.message); setLotSaving(false); return }
+    toast.success(`บันทึกสต็อกล็อต ${movements.length} รายการแล้ว`)
+    setShowLot(false)
+    fetchAll()
+    setLotSaving(false)
+  }
+
+  // ---- HISTORY ----
+  const openHistory = async (product: ProductStock) => {
+    setHistoryProduct(product)
+    setHistoryLoading(true)
+    setHistoryItems([])
+    const { data } = await supabase
+      .from('stock_movements')
+      .select('id, type, quantity, note, movement_date, created_at, variant:product_variants(color, size)')
+      .eq('product_id', product.id)
+      .order('movement_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(50)
+    setHistoryItems((data ?? []).map((d: any) => ({
+      id: d.id, type: d.type, quantity: d.quantity, note: d.note,
+      movement_date: d.movement_date, created_at: d.created_at,
+      variant_color: d.variant?.color ?? null, variant_size: d.variant?.size ?? null,
+    })))
+    setHistoryLoading(false)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -246,7 +349,10 @@ export function ProductsPage() {
           <h1 className="text-2xl font-bold text-rowa-text">สินค้า & สต็อก</h1>
           <p className="text-rowa-muted text-sm">{filtered.length} / {products.length} รายการ</p>
         </div>
-        {isAdmin && <Button onClick={openCreate}><Plus className="h-4 w-4" /> เพิ่มสินค้า</Button>}
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={openLot}><Layers className="h-4 w-4" /> รับสต็อกล็อต</Button>
+          {isAdmin && <Button onClick={openCreate}><Plus className="h-4 w-4" /> เพิ่มสินค้า</Button>}
+        </div>
       </div>
 
       {/* Stock summary */}
@@ -391,6 +497,7 @@ export function ProductsPage() {
                           const vs = variantStocks[product.id] ?? []
                           setStockForm({ type: 'in', quantity: '', note: '', variant_id: vs.length > 0 ? vs[0].id : '', movement_date: new Date().toISOString().slice(0, 10) })
                         }}>สต็อก</Button>
+                        <Button variant="ghost" size="sm" onClick={() => openHistory(product)} title="ประวัติสต็อก"><History className="h-4 w-4 text-gray-400" /></Button>
                         {isAdmin && <>
                           <Button variant="ghost" size="sm" onClick={() => openEdit(product)}><Pencil className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="sm" onClick={() => deleteProduct(product.id)}><Trash2 className="h-4 w-4 text-red-400" /></Button>
@@ -523,6 +630,142 @@ export function ProductsPage() {
             <div className="flex gap-2 mt-6">
               <Button variant="secondary" className="flex-1 justify-center" onClick={() => setShowForm(false)}>ยกเลิก</Button>
               <Button className="flex-1 justify-center" loading={saving} onClick={saveProduct}>บันทึก</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LOT RECEIVE MODAL */}
+      {showLot && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-bold">รับสต็อกเป็นล็อต</h2>
+                <p className="text-xs text-rowa-muted">ใส่จำนวนสินค้าที่รับเข้าพร้อมกัน</p>
+              </div>
+              <button onClick={() => setShowLot(false)}><X className="h-5 w-5 text-gray-400" /></button>
+            </div>
+
+            {/* Controls */}
+            <div className="px-6 py-3 border-b border-gray-100 flex flex-wrap gap-3 items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-600">วันที่รับสินค้า</label>
+                <input type="date" className="input" value={lotDate} onChange={e => setLotDate(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1 flex-1 min-w-36">
+                <label className="text-xs font-medium text-gray-600">หมายเหตุ / ชื่อล็อต</label>
+                <input className="input" placeholder="เช่น ล็อต เม.ย. 68" value={lotNote} onChange={e => setLotNote(e.target.value)} />
+              </div>
+              <div className="flex gap-2 items-end">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-600">ใส่จำนวนเท่ากันทุกรายการ</label>
+                  <input type="number" className="input w-24" placeholder="จำนวน" value={bulkQty} onChange={e => setBulkQty(e.target.value)} />
+                </div>
+                <Button variant="secondary" size="sm" onClick={applyBulkQty}>ใส่ทั้งหมด</Button>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-y-auto flex-1">
+              <table className="w-full">
+                <thead className="sticky top-0 bg-rowa-bg/80">
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left text-xs font-medium text-rowa-muted px-6 py-2">สินค้า</th>
+                    <th className="text-left text-xs font-medium text-rowa-muted px-4 py-2">ตัวเลือก</th>
+                    <th className="text-center text-xs font-medium text-rowa-muted px-4 py-2 w-28">จำนวนรับเข้า</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lotItems.map((item, idx) => {
+                    if (item.variants.length === 0) {
+                      return (
+                        <tr key={item.product_id} className="border-b border-gray-50">
+                          <td className="px-6 py-2 text-sm font-medium">{item.product_name}</td>
+                          <td className="px-4 py-2 text-xs text-rowa-muted">—</td>
+                          <td className="px-4 py-2">
+                            <input type="number" min="0" placeholder="0" className="input text-center w-20 mx-auto block"
+                              value={item.quantities['']}
+                              onChange={e => setLotItems(its => its.map((it, i) => i === idx ? { ...it, quantities: { '': e.target.value } } : it))} />
+                          </td>
+                        </tr>
+                      )
+                    }
+                    return item.variants.map((v, vi) => (
+                      <tr key={`${item.product_id}-${v.id}`} className="border-b border-gray-50">
+                        <td className="px-6 py-2 text-sm font-medium">{vi === 0 ? item.product_name : ''}</td>
+                        <td className="px-4 py-2 text-xs text-rowa-muted">{v.label}</td>
+                        <td className="px-4 py-2">
+                          <input type="number" min="0" placeholder="0" className="input text-center w-20 mx-auto block"
+                            value={item.quantities[v.id]}
+                            onChange={e => setLotItems(its => its.map((it, i) => i === idx ? { ...it, quantities: { ...it.quantities, [v.id]: e.target.value } } : it))} />
+                        </td>
+                      </tr>
+                    ))
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-2 justify-end">
+              <Button variant="secondary" onClick={() => setShowLot(false)}>ยกเลิก</Button>
+              <Button loading={lotSaving} onClick={saveLot}><ArrowUp className="h-4 w-4" /> บันทึกรับสต็อก</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HISTORY MODAL */}
+      {historyProduct && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-bold">ประวัติสต็อก</h2>
+                <p className="text-sm text-rowa-muted">{historyProduct.name}</p>
+              </div>
+              <button onClick={() => setHistoryProduct(null)}><X className="h-5 w-5 text-gray-400" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {historyLoading ? (
+                <div className="py-12 text-center text-rowa-muted text-sm">กำลังโหลด...</div>
+              ) : historyItems.length === 0 ? (
+                <div className="py-12 text-center text-rowa-muted text-sm">ยังไม่มีประวัติการเคลื่อนไหว</div>
+              ) : (
+                <table className="w-full">
+                  <thead className="sticky top-0 bg-rowa-bg/80">
+                    <tr className="border-b border-gray-100">
+                      <th className="text-left text-xs font-medium text-rowa-muted px-6 py-2">วันที่</th>
+                      <th className="text-left text-xs font-medium text-rowa-muted px-4 py-2">ประเภท</th>
+                      <th className="text-left text-xs font-medium text-rowa-muted px-4 py-2">ตัวเลือก</th>
+                      <th className="text-center text-xs font-medium text-rowa-muted px-4 py-2">จำนวน</th>
+                      <th className="text-left text-xs font-medium text-rowa-muted px-4 py-2">หมายเหตุ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyItems.map(h => {
+                      const dateStr = h.movement_date ?? h.created_at.slice(0, 10)
+                      const d = new Date(dateStr)
+                      const label = d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })
+                      const variantLabel = [h.variant_color, h.variant_size].filter(Boolean).join(' / ')
+                      return (
+                        <tr key={h.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                          <td className="px-6 py-2 text-sm text-rowa-muted whitespace-nowrap">{label}</td>
+                          <td className="px-4 py-2">
+                            <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap
+                              ${h.type === 'in' ? 'bg-green-100 text-green-700' : h.type === 'out' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                              {h.type === 'in' ? '↑ รับเข้า' : h.type === 'out' ? '↓ ตัดออก' : '⟳ ปรับยอด'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-xs text-rowa-muted">{variantLabel || '—'}</td>
+                          <td className="px-4 py-2 text-center text-sm font-bold">{h.quantity}</td>
+                          <td className="px-4 py-2 text-xs text-rowa-muted">{h.note ?? '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>
