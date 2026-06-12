@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { ArrowUp, ArrowDown, Package, Search, Trash2 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
@@ -6,6 +7,7 @@ import toast from 'react-hot-toast'
 
 interface Movement {
   id: string
+  product_id: string
   type: 'in' | 'out' | 'adjustment'
   quantity: number
   note: string | null
@@ -18,6 +20,12 @@ interface Movement {
   created_by_name: string | null
 }
 
+interface ProductOption {
+  id: string
+  name: string
+  sku: string
+}
+
 const typeLabel: Record<string, string> = { in: 'รับเข้า', out: 'เบิกออก', adjustment: 'ปรับยอด' }
 const typeIcon: Record<string, React.ReactNode> = {
   in: <ArrowUp className="h-3.5 w-3.5" />,
@@ -28,10 +36,13 @@ const typeIcon: Record<string, React.ReactNode> = {
 export function StockMovementsPage() {
   const { profile } = useAuthStore()
   const isAdmin = profile?.role === 'admin'
+  const [searchParams] = useSearchParams()
 
   const [movements, setMovements] = useState<Movement[]>([])
+  const [products, setProducts] = useState<ProductOption[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [filterProduct, setFilterProduct] = useState(searchParams.get('product') ?? '')
   const [filterType, setFilterType] = useState('')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
@@ -42,22 +53,24 @@ export function StockMovementsPage() {
     let query = supabase
       .from('stock_movements')
       .select(`
-        id, type, quantity, note, movement_date, created_at,
+        id, product_id, type, quantity, note, movement_date, created_at,
         product:products(name, sku),
         variant:product_variants(color, size),
         creator:profiles(full_name)
       `)
       .order('movement_date', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
-      .limit(200)
+      .limit(500)
 
     if (filterType) query = query.eq('type', filterType)
     if (filterDateFrom) query = query.gte('movement_date', filterDateFrom)
     if (filterDateTo) query = query.lte('movement_date', filterDateTo)
+    if (filterProduct) query = query.eq('product_id', filterProduct)
 
     const { data } = await query
     setMovements((data ?? []).map((d: any) => ({
       id: d.id,
+      product_id: d.product_id,
       type: d.type,
       quantity: d.quantity,
       note: d.note,
@@ -72,10 +85,16 @@ export function StockMovementsPage() {
     setLoading(false)
   }
 
-  useEffect(() => { fetchMovements() }, [filterType, filterDateFrom, filterDateTo])
+  const fetchProducts = async () => {
+    const { data } = await supabase.from('products').select('id, name, sku').order('name')
+    setProducts(data ?? [])
+  }
+
+  useEffect(() => { fetchProducts() }, [])
+  useEffect(() => { fetchMovements() }, [filterType, filterDateFrom, filterDateTo, filterProduct])
 
   const deleteMovement = async (id: string) => {
-    if (!confirm('ต้องการลบรายการนี้? สต็อกจะถูกปรับตามการลบ')) return
+    if (!confirm('ต้องการลบรายการนี้?')) return
     setDeletingId(id)
     const { error } = await supabase.from('stock_movements').delete().eq('id', id)
     if (error) { toast.error(error.message); setDeletingId(null); return }
@@ -92,32 +111,44 @@ export function StockMovementsPage() {
 
   const totalIn = filtered.filter(m => m.type === 'in').reduce((s, m) => s + m.quantity, 0)
   const totalOut = filtered.filter(m => m.type === 'out').reduce((s, m) => s + m.quantity, 0)
+  const netStock = totalIn - totalOut
 
   const formatDate = (dateStr: string | null, fallback: string) => {
     const s = dateStr ?? fallback.slice(0, 10)
     return new Date(s).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })
   }
 
+  const selectedProduct = products.find(p => p.id === filterProduct)
+  const hasFilter = search || filterType || filterDateFrom || filterDateTo || filterProduct
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-rowa-text">ประวัติรับ-เบิกสต็อก</h1>
-        <p className="text-rowa-muted text-sm">ประวัติการเคลื่อนไหวสินค้าทั้งหมด</p>
+        <p className="text-rowa-muted text-sm">
+          {selectedProduct ? `กำลังดู: ${selectedProduct.name} (${selectedProduct.sku})` : 'ประวัติการเคลื่อนไหวสินค้าทั้งหมด'}
+        </p>
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <div className="card">
           <p className="text-xs text-rowa-muted">รายการทั้งหมด</p>
           <p className="text-2xl font-bold text-rowa-blue mt-1">{filtered.length}</p>
         </div>
         <div className="card">
           <p className="text-xs text-rowa-muted">รับเข้ารวม</p>
-          <p className="text-2xl font-bold text-green-600 mt-1">{totalIn.toLocaleString()} ชิ้น</p>
+          <p className="text-2xl font-bold text-green-600 mt-1">+{totalIn.toLocaleString()}</p>
         </div>
         <div className="card">
           <p className="text-xs text-rowa-muted">เบิกออกรวม</p>
-          <p className="text-2xl font-bold text-red-500 mt-1">{totalOut.toLocaleString()} ชิ้น</p>
+          <p className="text-2xl font-bold text-red-500 mt-1">-{totalOut.toLocaleString()}</p>
+        </div>
+        <div className="card">
+          <p className="text-xs text-rowa-muted">ยอดสุทธิ</p>
+          <p className={`text-2xl font-bold mt-1 ${netStock >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+            {netStock >= 0 ? '+' : ''}{netStock.toLocaleString()}
+          </p>
         </div>
       </div>
 
@@ -125,21 +156,33 @@ export function StockMovementsPage() {
       <div className="flex flex-wrap gap-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input className="input pl-9 w-52" placeholder="ค้นหาสินค้า, SKU, หมายเหตุ..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="input pl-9 w-48" placeholder="ค้นหา SKU, หมายเหตุ..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+
+        {/* Product filter */}
+        <select className="input w-56" value={filterProduct} onChange={e => setFilterProduct(e.target.value)}>
+          <option value="">ทุกสินค้า</option>
+          {products.map(p => (
+            <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+          ))}
+        </select>
+
         <select className="input w-36" value={filterType} onChange={e => setFilterType(e.target.value)}>
           <option value="">ทุกประเภท</option>
           <option value="in">รับเข้า</option>
           <option value="out">เบิกออก</option>
           <option value="adjustment">ปรับยอด</option>
         </select>
+
         <div className="flex items-center gap-2">
           <input type="date" className="input" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} />
           <span className="text-rowa-muted text-sm">ถึง</span>
           <input type="date" className="input" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} />
         </div>
-        {(search || filterType || filterDateFrom || filterDateTo) && (
-          <button className="text-sm text-rowa-muted hover:text-rowa-text" onClick={() => { setSearch(''); setFilterType(''); setFilterDateFrom(''); setFilterDateTo('') }}>
+
+        {hasFilter && (
+          <button className="text-sm text-rowa-muted hover:text-rowa-text"
+            onClick={() => { setSearch(''); setFilterType(''); setFilterDateFrom(''); setFilterDateTo(''); setFilterProduct('') }}>
             ล้างตัวกรอง
           </button>
         )}
@@ -159,7 +202,7 @@ export function StockMovementsPage() {
               <tr className="bg-rowa-bg/50 border-b border-gray-100">
                 <th className="text-left text-xs font-medium text-rowa-muted px-6 py-3" style={{ whiteSpace: 'nowrap' }}>วันที่</th>
                 <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap' }}>ประเภท</th>
-                <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap' }}>สินค้า</th>
+                {!filterProduct && <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap' }}>สินค้า</th>}
                 <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap' }}>ตัวเลือก</th>
                 <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap', minWidth: 80 }}>จำนวน</th>
                 <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap' }}>หมายเหตุ</th>
@@ -181,26 +224,25 @@ export function StockMovementsPage() {
                         {typeIcon[m.type]} {typeLabel[m.type]}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-rowa-text">{m.product_name}</p>
-                      <p className="text-xs text-rowa-muted font-mono">{m.product_sku}</p>
-                    </td>
+                    {!filterProduct && (
+                      <td className="px-4 py-3">
+                        <p className="text-sm font-medium text-rowa-text">{m.product_name}</p>
+                        <p className="text-xs text-rowa-muted font-mono">{m.product_sku}</p>
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-sm text-rowa-muted">{variantLabel || '—'}</td>
                     <td className="px-4 py-3 text-center">
                       <span className={`text-sm font-bold ${m.type === 'in' ? 'text-green-600' : m.type === 'out' ? 'text-red-500' : 'text-blue-600'}`}>
                         {m.type === 'in' ? '+' : m.type === 'out' ? '-' : ''}{m.quantity}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-rowa-muted">{m.note ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-rowa-muted max-w-xs truncate">{m.note ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-rowa-muted">{m.created_by_name ?? '—'}</td>
                     {isAdmin && (
                       <td className="px-6 py-3 text-right">
-                        <button
-                          onClick={() => deleteMovement(m.id)}
-                          disabled={deletingId === m.id}
+                        <button onClick={() => deleteMovement(m.id)} disabled={deletingId === m.id}
                           className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
-                          title="ลบรายการ"
-                        >
+                          title="ลบรายการ">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </td>

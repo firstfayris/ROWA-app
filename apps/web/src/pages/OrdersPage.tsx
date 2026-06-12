@@ -334,10 +334,25 @@ export function OrdersPage() {
                     <button
                       onClick={async e => {
                         e.stopPropagation()
-                        if (!confirm('ต้องการลบคำสั่งซื้อนี้? รายการสต็อกที่ตัดออกไปจะไม่ถูกคืน')) return
+                        if (!confirm('ต้องการลบคำสั่งซื้อนี้? สต็อกจะถูกคืนกลับอัตโนมัติ')) return
+                        // ดึง order_items เพื่อคืนสต็อก
+                        const { data: items } = await supabase
+                          .from('order_items').select('product_id, quantity').eq('order_id', order.id)
+                        if (items && items.length > 0) {
+                          await Promise.all(items.map((it: any) =>
+                            supabase.from('stock_movements').insert({
+                              product_id: it.product_id,
+                              type: 'in',
+                              quantity: it.quantity,
+                              note: `คืนสต็อก (ลบออเดอร์ #${order.id.slice(0,8).toUpperCase()})`,
+                              created_by: profile!.id,
+                              movement_date: new Date().toISOString().slice(0,10),
+                            })
+                          ))
+                        }
                         await supabase.from('order_items').delete().eq('order_id', order.id)
                         await supabase.from('orders').delete().eq('id', order.id)
-                        toast.success('ลบคำสั่งซื้อแล้ว'); fetchOrders()
+                        toast.success('ลบคำสั่งซื้อและคืนสต็อกแล้ว'); fetchOrders()
                       }}
                       className="p-2 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
                       title="ลบคำสั่งซื้อ">

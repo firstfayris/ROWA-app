@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Package, Pencil, Trash2, ArrowUp, ArrowDown, Upload, X, Tag, History, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -102,6 +103,7 @@ const defaultForm = (): ProductForm => ({
 export function ProductsPage() {
   const { profile } = useAuthStore()
   const isAdmin = profile?.role === 'admin'
+  const navigate = useNavigate()
   const canViewCost = isAdmin
 
   const [products, setProducts] = useState<ProductStock[]>([])
@@ -544,7 +546,7 @@ export function ProductsPage() {
                           const vs = variantStocks[product.id] ?? []
                           setStockForm({ type: 'in', quantity: '', note: '', variant_id: vs.length > 0 ? vs[0].id : '', movement_date: new Date().toISOString().slice(0, 10) })
                         }}>สต็อก</Button>
-                        <Button variant="ghost" size="sm" onClick={() => openHistory(product)} title="ประวัติสต็อก"><History className="h-4 w-4 text-gray-400" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => navigate(`/stock-movements?product=${product.id}`)} title="ประวัติสต็อก"><History className="h-4 w-4 text-gray-400" /></Button>
                         {isAdmin && <>
                           <Button variant="ghost" size="sm" onClick={() => openEdit(product)}><Pencil className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="sm" onClick={() => deleteProduct(product.id)}><Trash2 className="h-4 w-4 text-red-400" /></Button>
