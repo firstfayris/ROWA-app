@@ -26,6 +26,7 @@ interface ProductStock {
   cost_price: number
   current_stock: number
   category_id: string | null
+  store_price?: number | null
 }
 
 interface PlatformPrice {
@@ -139,12 +140,19 @@ export function ProductsPage() {
 
   const fetchAll = async () => {
     setLoading(true)
-    const [{ data: prods }, { data: cats }, { data: allVariants }] = await Promise.all([
+    const [{ data: prods }, { data: cats }, { data: allVariants }, { data: storePrices }] = await Promise.all([
       supabase.from('product_stock').select('*, category_id').order('name'),
       supabase.from('categories').select('*').order('brand,name'),
       supabase.from('variant_stock').select('*'),
+      supabase.from('product_platforms').select('product_id, selling_price, discount_percent').eq('platform', 'store'),
     ])
-    setProducts(prods ?? [])
+    // merge store price into products
+    const priceMap: Record<string, number> = {}
+    for (const sp of storePrices ?? []) {
+      const disc = sp.discount_percent ?? 0
+      priceMap[sp.product_id] = sp.selling_price * (1 - disc / 100)
+    }
+    setProducts((prods ?? []).map((p: any) => ({ ...p, store_price: priceMap[p.id] ?? null })))
     setCategories(cats ?? [])
     // Group variants by product_id
     const grouped: Record<string, VariantStock[]> = {}
@@ -459,6 +467,7 @@ export function ProductsPage() {
                 </th>
                 <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap' }}>หมวดหมู่</th>
                 <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap' }}>SKU</th>
+                <th className="text-right text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap', minWidth: 90 }}>ราคาขาย</th>
                 {canViewCost && (
                   <th className="text-right text-xs font-medium text-rowa-muted px-4 py-3 cursor-pointer select-none hover:text-rowa-blue" style={{ whiteSpace: 'nowrap', minWidth: 90 }} onClick={() => handleSort('cost_price')}>
                     ต้นทุน{sortIcon('cost_price')}
@@ -504,6 +513,9 @@ export function ProductsPage() {
                       ) : <span className="text-xs text-gray-300">—</span>}
                     </td>
                     <td className="px-4 py-3 text-sm text-rowa-muted">{product.sku}</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-rowa-blue">
+                      {product.store_price != null ? formatCurrency(product.store_price) : <span className="text-gray-300">—</span>}
+                    </td>
                     {canViewCost && <td className="px-4 py-3 text-sm text-right font-medium">{formatCurrency(product.cost_price)}</td>}
                     <td className="px-4 py-3 text-center" style={{ minWidth: 110, whiteSpace: 'nowrap' }}>
                       <Badge variant={product.current_stock === 0 ? 'danger' : product.current_stock <= 5 ? 'warning' : 'success'}>
