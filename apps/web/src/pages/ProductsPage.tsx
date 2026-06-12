@@ -486,8 +486,17 @@ export function ProductsPage() {
                   <tr key={product.id} className="border-b border-gray-50 hover:bg-rowa-bg/30 transition-colors">
                     <td className="px-6 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-rowa-blue/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                          {product.image_url ? <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" /> : <Package className="h-5 w-5 text-rowa-blue" />}
+                        <div className="relative group w-10 h-10 rounded-lg bg-rowa-blue/10 flex items-center justify-center flex-shrink-0 overflow-visible">
+                          {product.image_url ? (
+                            <>
+                              <img src={product.image_url} alt={product.name} className="w-full h-full object-cover rounded-lg" />
+                              <div className="absolute left-12 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block pointer-events-none">
+                                <div className="bg-white rounded-xl shadow-2xl border border-gray-100 p-1.5">
+                                  <img src={product.image_url} alt={product.name} className="w-48 h-48 object-cover rounded-lg" />
+                                </div>
+                              </div>
+                            </>
+                          ) : <Package className="h-5 w-5 text-rowa-blue" />}
                         </div>
                         <div>
                           <span className="font-medium text-sm text-rowa-text">{product.name}</span>
