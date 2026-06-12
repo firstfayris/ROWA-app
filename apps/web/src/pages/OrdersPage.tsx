@@ -311,24 +311,40 @@ export function OrdersPage() {
           <div>
             {filtered.map(order => (
               <div key={order.id} className="border-b border-gray-50 last:border-0">
-                <button onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}
-                  className="w-full flex items-center gap-4 px-6 py-4 hover:bg-rowa-bg/30 transition-colors text-left">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge variant={order.platform as 'lazada' | 'shopee' | 'store'}>{platformLabel[order.platform]}</Badge>
-                      <Badge variant={statusVariant[order.status]}>{statusLabel[order.status]}</Badge>
+                <div className="flex items-center gap-2 pr-4">
+                  <button onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}
+                    className="flex-1 flex items-center gap-4 px-6 py-4 hover:bg-rowa-bg/30 transition-colors text-left">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant={order.platform as 'lazada' | 'shopee' | 'store'}>{platformLabel[order.platform]}</Badge>
+                        <Badge variant={statusVariant[order.status]}>{statusLabel[order.status]}</Badge>
+                      </div>
+                      <p className="text-xs text-rowa-muted">
+                        {order.platform_order_id ? `#${order.platform_order_id}` : `#${order.id.slice(0, 8).toUpperCase()}`}
+                        {' · '}
+                        {format(new Date(order.created_at), 'd MMM yyyy HH:mm', { locale: th })}
+                      </p>
                     </div>
-                    <p className="text-xs text-rowa-muted">
-                      {order.platform_order_id ? `#${order.platform_order_id}` : `#${order.id.slice(0, 8).toUpperCase()}`}
-                      {' · '}
-                      {format(new Date(order.created_at), 'd MMM yyyy HH:mm', { locale: th })}
-                    </p>
-                  </div>
-                  <div className="text-right flex items-center gap-3">
-                    <span className="font-semibold text-rowa-text">{formatCurrency(order.total_amount)}</span>
-                    {expandedId === order.id ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
-                  </div>
-                </button>
+                    <div className="text-right flex items-center gap-3">
+                      <span className="font-semibold text-rowa-text">{formatCurrency(order.total_amount)}</span>
+                      {expandedId === order.id ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+                    </div>
+                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={async e => {
+                        e.stopPropagation()
+                        if (!confirm('ต้องการลบคำสั่งซื้อนี้? รายการสต็อกที่ตัดออกไปจะไม่ถูกคืน')) return
+                        await supabase.from('order_items').delete().eq('order_id', order.id)
+                        await supabase.from('orders').delete().eq('id', order.id)
+                        toast.success('ลบคำสั่งซื้อแล้ว'); fetchOrders()
+                      }}
+                      className="p-2 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
+                      title="ลบคำสั่งซื้อ">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
                 {expandedId === order.id && order.order_items && (
                   <div className="px-6 pb-4 bg-rowa-bg/20 space-y-3">
                     <div className="border border-gray-100 rounded-xl overflow-hidden">
@@ -354,9 +370,11 @@ export function OrdersPage() {
                         )}
                       </div>
                     )}
-                    {isAdmin && (
+                    {isAdmin && (order.platform === 'store'
+                      ? (['cancelled'] as OrderStatus[])
+                      : (['confirmed', 'shipped', 'delivered', 'cancelled'] as OrderStatus[])
+                    ).some(s => order.status !== s) && (
                       <div className="mt-3 flex justify-end gap-2">
-                        {/* Store orders: only cancelled; other platforms: full flow */}
                         {(order.platform === 'store'
                           ? (['cancelled'] as OrderStatus[])
                           : (['confirmed', 'shipped', 'delivered', 'cancelled'] as OrderStatus[])
@@ -368,16 +386,6 @@ export function OrdersPage() {
                             }}>{statusLabel[s]}</Button>
                           )
                         ))}
-                        <Button variant="ghost" size="sm"
-                          onClick={async () => {
-                            if (!confirm('ต้องการลบคำสั่งซื้อนี้? รายการสต็อกที่ตัดออกไปจะไม่ถูกคืน')) return
-                            await supabase.from('order_items').delete().eq('order_id', order.id)
-                            await supabase.from('orders').delete().eq('id', order.id)
-                            toast.success('ลบคำสั่งซื้อแล้ว'); fetchOrders()
-                          }}
-                          className="text-gray-300 hover:text-red-500 hover:bg-red-50">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
                       </div>
                     )}
                   </div>
