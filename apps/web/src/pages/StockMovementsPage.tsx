@@ -5,6 +5,12 @@ import { ArrowUp, ArrowDown, Package, Search, Trash2 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import toast from 'react-hot-toast'
 
+interface Category {
+  id: string
+  name: string
+  brand: string
+}
+
 interface Movement {
   id: string
   product_id: string
@@ -24,6 +30,7 @@ interface ProductOption {
   id: string
   name: string
   sku: string
+  category_id: string | null
 }
 
 const typeLabel: Record<string, string> = { in: 'รับเข้า', out: 'เบิกออก', adjustment: 'ปรับยอด' }
@@ -40,9 +47,12 @@ export function StockMovementsPage() {
 
   const [movements, setMovements] = useState<Movement[]>([])
   const [products, setProducts] = useState<ProductOption[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterProduct, setFilterProduct] = useState(searchParams.get('product') ?? '')
+  const [filterBrand, setFilterBrand] = useState('')
+  const [filterCategory, setFilterCategory] = useState('')
   const [filterType, setFilterType] = useState('')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
@@ -86,11 +96,24 @@ export function StockMovementsPage() {
   }
 
   const fetchProducts = async () => {
-    const { data } = await supabase.from('products').select('id, name, sku').order('name')
-    setProducts(data ?? [])
+    const [{ data: prods }, { data: cats }] = await Promise.all([
+      supabase.from('products').select('id, name, sku, category_id').order('name'),
+      supabase.from('categories').select('id, name, brand').order('brand,name'),
+    ])
+    setProducts(prods ?? [])
+    setCategories(cats ?? [])
   }
 
   useEffect(() => { fetchProducts() }, [])
+
+  const brands = [...new Set(categories.map(c => c.brand))].filter(Boolean)
+
+  const visibleProducts = products.filter(p => {
+    const cat = categories.find(c => c.id === p.category_id)
+    if (filterBrand && cat?.brand !== filterBrand) return false
+    if (filterCategory && p.category_id !== filterCategory) return false
+    return true
+  })
   useEffect(() => { fetchMovements() }, [filterType, filterDateFrom, filterDateTo, filterProduct])
 
   const deleteMovement = async (id: string) => {
@@ -119,7 +142,7 @@ export function StockMovementsPage() {
   }
 
   const selectedProduct = products.find(p => p.id === filterProduct)
-  const hasFilter = search || filterType || filterDateFrom || filterDateTo || filterProduct
+  const hasFilter = search || filterType || filterDateFrom || filterDateTo || filterProduct || filterBrand || filterCategory
 
   return (
     <div className="space-y-6">
@@ -159,10 +182,32 @@ export function StockMovementsPage() {
           <input className="input pl-9 w-48" placeholder="ค้นหา SKU, หมายเหตุ..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
 
+        {/* Brand filter */}
+        <select className="input w-36" value={filterBrand}
+          onChange={e => { setFilterBrand(e.target.value); setFilterCategory(''); setFilterProduct('') }}>
+          <option value="">ทุกแบรนด์</option>
+          {brands.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
+
+        {/* Category filter */}
+        <select className="input w-44" value={filterCategory}
+          onChange={e => {
+            const catId = e.target.value
+            const cat = categories.find(c => c.id === catId)
+            setFilterCategory(catId)
+            if (cat) setFilterBrand(cat.brand)
+            setFilterProduct('')
+          }}>
+          <option value="">ทุกหมวดหมู่</option>
+          {categories.filter(c => !filterBrand || c.brand === filterBrand).map(c => (
+            <option key={c.id} value={c.id}>{c.brand} — {c.name}</option>
+          ))}
+        </select>
+
         {/* Product filter */}
-        <select className="input w-56" value={filterProduct} onChange={e => setFilterProduct(e.target.value)}>
+        <select className="input w-52" value={filterProduct} onChange={e => setFilterProduct(e.target.value)}>
           <option value="">ทุกสินค้า</option>
-          {products.map(p => (
+          {visibleProducts.map(p => (
             <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
           ))}
         </select>
@@ -182,7 +227,7 @@ export function StockMovementsPage() {
 
         {hasFilter && (
           <button className="text-sm text-rowa-muted hover:text-rowa-text"
-            onClick={() => { setSearch(''); setFilterType(''); setFilterDateFrom(''); setFilterDateTo(''); setFilterProduct('') }}>
+            onClick={() => { setSearch(''); setFilterType(''); setFilterDateFrom(''); setFilterDateTo(''); setFilterProduct(''); setFilterBrand(''); setFilterCategory('') }}>
             ล้างตัวกรอง
           </button>
         )}
