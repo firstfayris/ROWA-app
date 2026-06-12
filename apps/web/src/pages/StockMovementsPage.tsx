@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Badge } from '@/components/ui/Badge'
-import { ArrowUp, ArrowDown, Package, Search } from 'lucide-react'
+import { ArrowUp, ArrowDown, Package, Search, Trash2 } from 'lucide-react'
+import { useAuthStore } from '@/store/authStore'
+import toast from 'react-hot-toast'
 
 interface Movement {
   id: string
@@ -18,7 +19,6 @@ interface Movement {
 }
 
 const typeLabel: Record<string, string> = { in: 'รับเข้า', out: 'เบิกออก', adjustment: 'ปรับยอด' }
-const typeVariant: Record<string, 'success' | 'danger' | 'default'> = { in: 'success', out: 'danger', adjustment: 'default' }
 const typeIcon: Record<string, React.ReactNode> = {
   in: <ArrowUp className="h-3.5 w-3.5" />,
   out: <ArrowDown className="h-3.5 w-3.5" />,
@@ -26,12 +26,16 @@ const typeIcon: Record<string, React.ReactNode> = {
 }
 
 export function StockMovementsPage() {
+  const { profile } = useAuthStore()
+  const isAdmin = profile?.role === 'admin'
+
   const [movements, setMovements] = useState<Movement[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const fetchMovements = async () => {
     setLoading(true)
@@ -69,6 +73,16 @@ export function StockMovementsPage() {
   }
 
   useEffect(() => { fetchMovements() }, [filterType, filterDateFrom, filterDateTo])
+
+  const deleteMovement = async (id: string) => {
+    if (!confirm('ต้องการลบรายการนี้? สต็อกจะถูกปรับตามการลบ')) return
+    setDeletingId(id)
+    const { error } = await supabase.from('stock_movements').delete().eq('id', id)
+    if (error) { toast.error(error.message); setDeletingId(null); return }
+    toast.success('ลบรายการแล้ว')
+    setMovements(prev => prev.filter(m => m.id !== id))
+    setDeletingId(null)
+  }
 
   const filtered = movements.filter(m => {
     if (!search) return true
@@ -149,7 +163,8 @@ export function StockMovementsPage() {
                 <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap' }}>ตัวเลือก</th>
                 <th className="text-center text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap', minWidth: 80 }}>จำนวน</th>
                 <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap' }}>หมายเหตุ</th>
-                <th className="text-left text-xs font-medium text-rowa-muted px-6 py-3" style={{ whiteSpace: 'nowrap' }}>บันทึกโดย</th>
+                <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3" style={{ whiteSpace: 'nowrap' }}>บันทึกโดย</th>
+                {isAdmin && <th className="px-6 py-3" style={{ minWidth: 60 }} />}
               </tr>
             </thead>
             <tbody>
@@ -177,7 +192,19 @@ export function StockMovementsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-rowa-muted">{m.note ?? '—'}</td>
-                    <td className="px-6 py-3 text-sm text-rowa-muted">{m.created_by_name ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-rowa-muted">{m.created_by_name ?? '—'}</td>
+                    {isAdmin && (
+                      <td className="px-6 py-3 text-right">
+                        <button
+                          onClick={() => deleteMovement(m.id)}
+                          disabled={deletingId === m.id}
+                          className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                          title="ลบรายการ"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 )
               })}
