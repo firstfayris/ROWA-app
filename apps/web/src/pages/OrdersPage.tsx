@@ -479,6 +479,7 @@ export function OrdersPage() {
               <div className="space-y-3">
                 {saleItems.map((item, i) => {
                   const prod = products.find(p => p.id === item.product_id)
+                  if (prod) console.log('[DEBUG] prod.variants:', prod.variants)
                   const autoPrice = prod?.prices[salePlatform] ?? null
                   const itemProducts = visibleProducts(item.filterBrand, item.filterCategory)
                   return (
