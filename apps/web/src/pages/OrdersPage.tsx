@@ -406,7 +406,16 @@ export function OrdersPage() {
                           {brands.map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
                         <select className="input flex-1 text-xs" value={item.filterCategory}
-                          onChange={e => updateItem(i, { filterCategory: e.target.value, product_id: '', unit_price: 0 })}>
+                          onChange={e => {
+                            const catId = e.target.value
+                            const cat = categories.find(c => c.id === catId)
+                            updateItem(i, {
+                              filterCategory: catId,
+                              filterBrand: cat?.brand ?? item.filterBrand,
+                              product_id: '',
+                              unit_price: 0,
+                            })
+                          }}>
                           <option value="">ทุกหมวดหมู่</option>
                           {categories.filter(c => !item.filterBrand || c.brand === item.filterBrand).map(c => (
                             <option key={c.id} value={c.id}>{c.brand} — {c.name}</option>
