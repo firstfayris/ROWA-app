@@ -73,6 +73,7 @@ interface StockAdjForm {
 interface LotItem {
   product_id: string
   product_name: string
+  product_sku: string
   category_id: string | null
   variants: { id: string; label: string }[]
   quantities: Record<string, string>
@@ -286,7 +287,7 @@ export function ProductsPage() {
       const quantities: Record<string, string> = {}
       if (variants.length > 0) variants.forEach(v => { quantities[v.id] = '' })
       else quantities[''] = ''
-      return { product_id: p.id, product_name: p.name, category_id: p.category_id, variants, quantities }
+      return { product_id: p.id, product_name: p.name, product_sku: p.sku, category_id: p.category_id, variants, quantities }
     })
     setLotItems(items)
     setShowLot(true)
@@ -722,7 +723,10 @@ export function ProductsPage() {
                     if (item.variants.length === 0) {
                       return (
                         <tr key={item.product_id} className="border-b border-gray-50">
-                          <td className="px-6 py-2 text-sm font-medium">{item.product_name}</td>
+                          <td className="px-6 py-2">
+                            <p className="text-sm font-medium">{item.product_name}</p>
+                            <p className="text-xs text-rowa-muted font-mono">{item.product_sku}</p>
+                          </td>
                           <td className="px-4 py-2 text-xs text-rowa-muted">—</td>
                           <td className="px-4 py-2">
                             <input type="number" min="0" placeholder="0" className="input text-center w-20 mx-auto block"
@@ -734,7 +738,12 @@ export function ProductsPage() {
                     }
                     return item.variants.map((v, vi) => (
                       <tr key={`${item.product_id}-${v.id}`} className="border-b border-gray-50">
-                        <td className="px-6 py-2 text-sm font-medium">{vi === 0 ? item.product_name : ''}</td>
+                        <td className="px-6 py-2">
+                          {vi === 0 && <>
+                            <p className="text-sm font-medium">{item.product_name}</p>
+                            <p className="text-xs text-rowa-muted font-mono">{item.product_sku}</p>
+                          </>}
+                        </td>
                         <td className="px-4 py-2 text-xs text-rowa-muted">{v.label}</td>
                         <td className="px-4 py-2">
                           <input type="number" min="0" placeholder="0" className="input text-center w-20 mx-auto block"
