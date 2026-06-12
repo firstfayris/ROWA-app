@@ -112,6 +112,7 @@ export function OrdersPage() {
       .limit(100)
     setOrders(data ?? [])
     setLoading(false)
+    return data
   }
 
   const fetchProducts = async () => {
@@ -253,7 +254,7 @@ export function OrdersPage() {
     )
     if (itemsError) { toast.error(itemsError.message); setSaving(false); return }
 
-    await Promise.all(validItems.map(i =>
+    const stockResults = await Promise.all(validItems.map(i =>
       supabase.from('stock_movements').insert({
         product_id: i.product_id,
         type: 'out',
@@ -263,10 +264,12 @@ export function OrdersPage() {
         movement_date: paymentDate,
       })
     ))
+    const stockError = stockResults.find(r => r.error)?.error
+    if (stockError) toast.error(`บันทึกการขายแล้ว แต่ตัดสต็อกไม่สำเร็จ: ${stockError.message}`)
+    else toast.success('บันทึกการขายและตัดสต็อกแล้ว')
 
-    toast.success('บันทึกการขายแล้ว')
     setShowSaleModal(false)
-    fetchOrders()
+    await fetchOrders()
     setSaving(false)
   }
 
