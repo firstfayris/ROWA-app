@@ -45,6 +45,7 @@ interface ProductOption {
   category_id: string | null
   prices: Record<Platform, number | null>
   variants: ProductVariant[]
+  current_stock: number
 }
 
 interface Category {
@@ -124,12 +125,13 @@ export function OrdersPage() {
   }
 
   const fetchProducts = async () => {
-    const [{ data: prods }, { data: cats }, { data: platforms }, { data: groups }, { data: variants }] = await Promise.all([
+    const [{ data: prods }, { data: cats }, { data: platforms }, { data: groups }, { data: variantStocks }, { data: productStocks }] = await Promise.all([
       supabase.from('products').select('id, name, sku, cost_price, category_id').order('name'),
       supabase.from('categories').select('id, name, brand').order('brand,name'),
       supabase.from('product_platforms').select('product_id, platform, selling_price, discount_percent'),
       supabase.from('customer_groups').select('id, name, discount_percent').eq('active', true).order('name'),
-      supabase.from('product_variants').select('id, product_id, color, size'),
+      supabase.from('variant_stock').select('id, product_id, color, size, current_stock'),
+      supabase.from('product_stock').select('product_id, current_stock'),
     ])
     setCustomerGroups(groups ?? [])
     setCategories(cats ?? [])
@@ -141,13 +143,16 @@ export function OrdersPage() {
       priceMap[pp.product_id][pp.platform] = pp.selling_price * (1 - disc / 100)
     }
 
-    console.log('[DEBUG] variants raw:', variants)
     const variantMap: Record<string, ProductVariant[]> = {}
-    for (const v of variants ?? []) {
+    for (const v of variantStocks ?? []) {
       if (!variantMap[v.product_id]) variantMap[v.product_id] = []
-      variantMap[v.product_id].push({ id: v.id, color: v.color, size: v.size, current_stock: 0 })
+      variantMap[v.product_id].push({ id: v.id, color: v.color, size: v.size, current_stock: v.current_stock ?? 0 })
     }
-    console.log('[DEBUG] variantMap:', variantMap)
+
+    const stockMap: Record<string, number> = {}
+    for (const s of productStocks ?? []) {
+      stockMap[s.product_id] = s.current_stock ?? 0
+    }
 
     setProducts((prods ?? []).map((p: any) => ({
       id: p.id,
@@ -161,6 +166,7 @@ export function OrdersPage() {
         shopee: priceMap[p.id]?.['shopee'] ?? null,
       },
       variants: variantMap[p.id] ?? [],
+      current_stock: stockMap[p.id] ?? 0,
     })))
   }
 
@@ -173,7 +179,9 @@ export function OrdersPage() {
       const cat = categories.find(c => c.id === p.category_id)
       if (filterBrand && cat?.brand !== filterBrand) return false
       if (filterCategory && p.category_id !== filterCategory) return false
-      return true
+      // แสดงเฉพาะสินค้าที่มีสต็อก
+      if (p.variants.length > 0) return p.variants.some(v => v.current_stock > 0)
+      return p.current_stock > 0
     })
 
   const filtered = orders.filter(o => {
@@ -479,8 +487,7 @@ export function OrdersPage() {
               <div className="space-y-3">
                 {saleItems.map((item, i) => {
                   const prod = products.find(p => p.id === item.product_id)
-                  if (prod) console.log('[DEBUG] prod.variants:', prod.variants)
-                  const autoPrice = prod?.prices[salePlatform] ?? null
+const autoPrice = prod?.prices[salePlatform] ?? null
                   const itemProducts = visibleProducts(item.filterBrand, item.filterCategory)
                   return (
                     <div key={i} className="border border-gray-100 rounded-xl p-3 space-y-2">
@@ -542,10 +549,10 @@ export function OrdersPage() {
                           <select className="input" value={item.variant_id}
                             onChange={e => updateItem(i, { variant_id: e.target.value })}>
                             <option value="">-- เลือกตัวเลือก --</option>
-                            {prod.variants.map(v => {
+                            {prod.variants.filter(v => v.current_stock > 0).map(v => {
                               const label = [v.color, v.size].filter(Boolean).join(' / ') || `ตัวเลือก ${v.id.slice(0, 6)}`
                               return (
-                                <option key={v.id} value={v.id}>{label}</option>
+                                <option key={v.id} value={v.id}>{label} (คงเหลือ {v.current_stock})</option>
                               )
                             })}
                           </select>
