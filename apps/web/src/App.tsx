@@ -12,6 +12,7 @@ import { MarketingPage } from '@/pages/MarketingPage'
 import { StockAuditPage } from '@/pages/StockAuditPage'
 import { StockMovementsPage } from '@/pages/StockMovementsPage'
 import { CustomerGroupsPage } from '@/pages/CustomerGroupsPage'
+import { InventoryPage } from '@/pages/InventoryPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuthStore()
@@ -58,6 +59,7 @@ export default function App() {
           <Route path="orders" element={<OrdersPage />} />
           <Route path="stock-audit" element={<StockAuditPage />} />
           <Route path="stock-movements" element={<StockMovementsPage />} />
+          <Route path="inventory" element={<InventoryPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="marketing" element={<MarketingPage />} />
           <Route path="customer-groups" element={<RequireAdmin><CustomerGroupsPage /></RequireAdmin>} />
