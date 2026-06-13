@@ -179,9 +179,9 @@ export function OrdersPage() {
       const cat = categories.find(c => c.id === p.category_id)
       if (filterBrand && cat?.brand !== filterBrand) return false
       if (filterCategory && p.category_id !== filterCategory) return false
-      // แสดงเฉพาะสินค้าที่มีสต็อก
+      // ถ้ามี variant ให้แสดงเฉพาะเมื่อยังมี variant ที่มีสต็อก
       if (p.variants.length > 0) return p.variants.some(v => v.current_stock > 0)
-      return p.current_stock > 0
+      return true
     })
 
   const filtered = orders.filter(o => {
