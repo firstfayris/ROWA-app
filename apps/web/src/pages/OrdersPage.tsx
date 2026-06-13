@@ -131,7 +131,7 @@ export function OrdersPage() {
       supabase.from('product_platforms').select('product_id, platform, selling_price, discount_percent'),
       supabase.from('customer_groups').select('id, name, discount_percent').eq('active', true).order('name'),
       supabase.from('variant_stock').select('id, product_id, color, size, current_stock'),
-      supabase.from('product_stock').select('product_id, current_stock'),
+      supabase.from('product_stock').select('id, current_stock'),
     ])
     setCustomerGroups(groups ?? [])
     setCategories(cats ?? [])
@@ -151,7 +151,7 @@ export function OrdersPage() {
 
     const stockMap: Record<string, number> = {}
     for (const s of productStocks ?? []) {
-      stockMap[s.product_id] = s.current_stock ?? 0
+      stockMap[s.id] = s.current_stock ?? 0
     }
 
     setProducts((prods ?? []).map((p: any) => ({
@@ -179,9 +179,9 @@ export function OrdersPage() {
       const cat = categories.find(c => c.id === p.category_id)
       if (filterBrand && cat?.brand !== filterBrand) return false
       if (filterCategory && p.category_id !== filterCategory) return false
-      // ถ้ามี variant ให้แสดงเฉพาะเมื่อยังมี variant ที่มีสต็อก
+      // แสดงเฉพาะสินค้าที่มีสต็อก
       if (p.variants.length > 0) return p.variants.some(v => v.current_stock > 0)
-      return true
+      return p.current_stock > 0
     })
 
   const filtered = orders.filter(o => {
