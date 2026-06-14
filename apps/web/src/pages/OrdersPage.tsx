@@ -427,8 +427,8 @@ export function OrdersPage() {
 
       {/* ===== NEW SALE MODAL ===== */}
       {showSaleModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl flex flex-col max-h-[92vh]">
+        <div className="fixed inset-0 bg-black/40 flex items-end md:items-center justify-center z-50 md:p-4">
+          <div className="bg-white md:rounded-2xl rounded-t-2xl w-full md:max-w-2xl shadow-xl flex flex-col h-[95dvh] md:h-auto md:max-h-[92vh]">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
               <h2 className="text-lg font-bold">บันทึกการขาย</h2>
