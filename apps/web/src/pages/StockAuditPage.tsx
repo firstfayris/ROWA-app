@@ -14,6 +14,8 @@ import * as XLSX from 'xlsx'
 interface AuditItem {
   id?: string
   product_id: string
+  variant_id?: string | null
+  variant_label?: string | null
   product_name: string
   product_sku: string
   product_brand: string
@@ -113,27 +115,40 @@ export function StockAuditPage() {
   }
 
   const loadProducts = async () => {
-    const { data: prods } = await supabase
-      .from('product_stock')
-      .select('id, name, sku, current_stock, category_id')
-      .order('name')
-    const { data: cats } = await supabase
-      .from('categories')
-      .select('id, name, brand')
+    const [{ data: prods }, { data: cats }, { data: variantStocks }] = await Promise.all([
+      supabase.from('product_stock').select('id, name, sku, current_stock, category_id').order('name'),
+      supabase.from('categories').select('id, name, brand'),
+      supabase.from('variant_stock').select('id, product_id, color, size, current_stock'),
+    ])
 
-    const items: AuditItem[] = (prods ?? []).map(p => {
+    const variantMap: Record<string, typeof variantStocks> = {}
+    for (const v of variantStocks ?? []) {
+      if (!variantMap[v.product_id]) variantMap[v.product_id] = []
+      variantMap[v.product_id]!.push(v)
+    }
+
+    const items: AuditItem[] = []
+    for (const p of prods ?? []) {
       const cat = cats?.find(c => c.id === p.category_id)
-      return {
+      const base = {
         product_id: p.id,
         product_name: p.name,
         product_sku: p.sku,
         product_brand: cat?.brand ?? '—',
         product_category: cat?.name ?? '—',
-        system_qty: p.current_stock,
         actual_qty: '',
         note: '',
       }
-    })
+      const variants = variantMap[p.id]
+      if (variants && variants.length > 0) {
+        for (const v of variants) {
+          const label = [v.color, v.size].filter(Boolean).join(' / ') || 'ตัวเลือก'
+          items.push({ ...base, variant_id: v.id, variant_label: label, system_qty: v.current_stock ?? 0 })
+        }
+      } else {
+        items.push({ ...base, variant_id: null, variant_label: null, system_qty: p.current_stock ?? 0 })
+      }
+    }
     setAuditItems(items)
   }
 
@@ -162,6 +177,7 @@ export function StockAuditPage() {
     const itemsToSave = auditItems.map(i => ({
       audit_id: audit.id,
       product_id: i.product_id,
+      variant_id: i.variant_id ?? null,
       system_qty: i.system_qty,
       actual_qty: i.actual_qty !== '' ? parseInt(i.actual_qty) : null,
       note: i.note || null,
@@ -255,17 +271,24 @@ export function StockAuditPage() {
           </tr>
         </thead>
         <tbody>
-          ${items.map((item, i) => `
+          ${items.map((item, i) => {
+            const prev = items[i - 1]
+            const isFirst = !prev || prev.product_id !== item.product_id
+            const nameCell = isFirst
+              ? `${item.product_name}${item.variant_label ? ` <span style="background:#f3f4f6;border-radius:4px;padding:1px 5px;font-size:10px">${item.variant_label}</span>` : ''}`
+              : item.variant_label ? `<span style="background:#f3f4f6;border-radius:4px;padding:1px 5px;font-size:10px">${item.variant_label}</span>` : ''
+            return `
             <tr style="background:${i % 2 === 0 ? '#fff' : '#f8f9ff'}">
               <td style="padding:5px 8px;border:1px solid #ddd;text-align:center">${i + 1}</td>
-              <td style="padding:5px 8px;border:1px solid #ddd">${item.product_name}</td>
-              <td style="padding:5px 8px;border:1px solid #ddd">${item.product_brand}</td>
-              <td style="padding:5px 8px;border:1px solid #ddd">${item.product_category}</td>
-              <td style="padding:5px 8px;border:1px solid #ddd;font-family:monospace;font-size:10px">${item.product_sku}</td>
+              <td style="padding:5px 8px;border:1px solid #ddd">${nameCell}</td>
+              <td style="padding:5px 8px;border:1px solid #ddd">${isFirst ? item.product_brand : ''}</td>
+              <td style="padding:5px 8px;border:1px solid #ddd">${isFirst ? item.product_category : ''}</td>
+              <td style="padding:5px 8px;border:1px solid #ddd;font-family:monospace;font-size:10px">${isFirst ? item.product_sku : ''}</td>
               <td style="padding:5px 8px;border:1px solid #ddd;text-align:center">${item.system_qty}</td>
               <td style="padding:5px 8px;border:1px solid #ddd;text-align:center">${isDetail && item.actual_qty !== '—' ? item.actual_qty : ''}</td>
               <td style="padding:5px 8px;border:1px solid #ddd">${isDetail ? item.note : ''}</td>
-            </tr>`).join('')}
+            </tr>`
+          }).join('')}
         </tbody>
       </table>
       <div style="margin-top:20px;font-size:11px;color:#888">
@@ -452,31 +475,40 @@ export function StockAuditPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {auditItems.map((item, i) => (
-                    <tr key={item.product_id} className="border-b border-gray-50">
-                      <td className="px-4 py-2 text-xs text-gray-400">{i + 1}</td>
-                      <td className="px-4 py-2 text-sm font-medium">{item.product_name}</td>
-                      <td className="px-4 py-2 text-xs text-rowa-muted">{item.product_brand} · {item.product_category}</td>
-                      <td className="px-4 py-2 text-xs font-mono text-rowa-muted">{item.product_sku}</td>
-                      <td className="px-4 py-2 text-center">
-                        <Badge variant={item.system_qty === 0 ? 'danger' : item.system_qty <= 5 ? 'warning' : 'success'}>
-                          {item.system_qty}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-2">
-                        <input type="number" min="0" placeholder="—"
-                          value={item.actual_qty}
-                          onChange={e => setAuditItems(items => items.map((it, j) => j === i ? { ...it, actual_qty: e.target.value } : it))}
-                          className="input text-center w-20 mx-auto block" />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input type="text" placeholder="หมายเหตุ"
-                          value={item.note}
-                          onChange={e => setAuditItems(items => items.map((it, j) => j === i ? { ...it, note: e.target.value } : it))}
-                          className="input text-sm w-36" />
-                      </td>
-                    </tr>
-                  ))}
+                  {auditItems.map((item, i) => {
+                    const prevItem = auditItems[i - 1]
+                    const isFirstOfProduct = !prevItem || prevItem.product_id !== item.product_id
+                    return (
+                      <tr key={`${item.product_id}-${item.variant_id ?? 'nv'}`} className="border-b border-gray-50">
+                        <td className="px-4 py-2 text-xs text-gray-400">{i + 1}</td>
+                        <td className="px-4 py-2">
+                          {isFirstOfProduct && <p className="text-sm font-medium">{item.product_name}</p>}
+                          {item.variant_label && (
+                            <span className="inline-block text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 mt-0.5">{item.variant_label}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-xs text-rowa-muted">{isFirstOfProduct ? `${item.product_brand} · ${item.product_category}` : ''}</td>
+                        <td className="px-4 py-2 text-xs font-mono text-rowa-muted">{isFirstOfProduct ? item.product_sku : ''}</td>
+                        <td className="px-4 py-2 text-center">
+                          <Badge variant={item.system_qty === 0 ? 'danger' : item.system_qty <= 5 ? 'warning' : 'success'}>
+                            {item.system_qty}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2">
+                          <input type="number" min="0" placeholder="—"
+                            value={item.actual_qty}
+                            onChange={e => setAuditItems(items => items.map((it, j) => j === i ? { ...it, actual_qty: e.target.value } : it))}
+                            className="input text-center w-20 mx-auto block" />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input type="text" placeholder="หมายเหตุ"
+                            value={item.note}
+                            onChange={e => setAuditItems(items => items.map((it, j) => j === i ? { ...it, note: e.target.value } : it))}
+                            className="input text-sm w-36" />
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -609,20 +641,33 @@ export function StockAuditPage() {
             </tr>
           </thead>
           <tbody>
-            {(view === 'new' ? auditItems : selectedAudit?.items ?? [])
-              .filter(item => printFilter === 'all' || item.system_qty > 0)
-              .map((item, i) => (
-                <tr key={item.product_id}>
-                  <td style={{ textAlign: 'center' }}>{i + 1}</td>
-                  <td>{item.product_name}</td>
-                  <td>{item.product_brand}</td>
-                  <td>{item.product_category}</td>
-                  <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{item.product_sku}</td>
-                  <td style={{ textAlign: 'center' }}>{item.system_qty}</td>
-                  <td style={{ textAlign: 'center' }}>{view === 'detail' && item.actual_qty !== '—' ? item.actual_qty : ''}</td>
-                  <td>{view === 'detail' ? item.note : ''}</td>
-                </tr>
-              ))}
+            {(() => {
+              const baseItems = (view === 'new' ? auditItems : selectedAudit?.items ?? [])
+                .filter(item => printFilter === 'all' || item.system_qty > 0)
+              return baseItems.map((item, i) => {
+                const prevItem = baseItems[i - 1]
+                const isFirst = !prevItem || prevItem.product_id !== item.product_id
+                return (
+                  <tr key={`${item.product_id}-${item.variant_id ?? i}`}>
+                    <td style={{ textAlign: 'center' }}>{i + 1}</td>
+                    <td>
+                      {isFirst && <span>{item.product_name}</span>}
+                      {item.variant_label && (
+                        <span style={{ display: 'inline-block', background: '#f3f4f6', borderRadius: 4, padding: '1px 6px', fontSize: 10, marginLeft: isFirst ? 6 : 0 }}>
+                          {item.variant_label}
+                        </span>
+                      )}
+                    </td>
+                    <td>{isFirst ? item.product_brand : ''}</td>
+                    <td>{isFirst ? item.product_category : ''}</td>
+                    <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{isFirst ? item.product_sku : ''}</td>
+                    <td style={{ textAlign: 'center' }}>{item.system_qty}</td>
+                    <td style={{ textAlign: 'center' }}>{view === 'detail' && item.actual_qty !== '—' ? item.actual_qty : ''}</td>
+                    <td>{view === 'detail' ? item.note : ''}</td>
+                  </tr>
+                )
+              })
+            })()}
           </tbody>
         </table>
         <p style={{ marginTop: 24, fontSize: 11, color: '#999' }}>
