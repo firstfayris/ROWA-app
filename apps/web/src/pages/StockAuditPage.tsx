@@ -387,6 +387,7 @@ export function StockAuditPage() {
           .print-table th, .print-table td { border: 1px solid #ccc; padding: 6px 8px; }
           .print-table th { background: #f3f4f6; font-weight: 600; }
           .print-table tbody { break-inside: avoid; page-break-inside: avoid; }
+          .print-no-break { break-after: avoid !important; page-break-after: avoid !important; }
         }
       `}</style>
 
@@ -673,8 +674,9 @@ export function StockAuditPage() {
                 {group.map((item, gi) => {
                   rowNum++
                   const isFirst = gi === 0
+                  const isLast = gi === group.length - 1
                   return (
-                    <tr key={`${item.product_id}-${item.variant_id ?? gi}`}>
+                    <tr key={`${item.product_id}-${item.variant_id ?? gi}`} className={!isLast ? 'print-no-break' : ''}>
                       <td style={{ textAlign: 'center' }}>{rowNum}</td>
                       <td style={{ textAlign: 'center', padding: '4px' }}>
                         {isFirst && item.product_image && (
