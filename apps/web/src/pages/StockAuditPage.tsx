@@ -386,8 +386,7 @@ export function StockAuditPage() {
           .print-table { width: 100%; border-collapse: collapse; font-size: 12px; }
           .print-table th, .print-table td { border: 1px solid #ccc; padding: 6px 8px; }
           .print-table th { background: #f3f4f6; font-weight: 600; }
-          .print-table tbody { break-inside: avoid; page-break-inside: avoid; }
-          .print-no-break { break-after: avoid !important; page-break-after: avoid !important; }
+          .print-product-block { break-inside: avoid; page-break-inside: avoid; }
         }
       `}</style>
 
@@ -644,66 +643,90 @@ export function StockAuditPage() {
             * แสดงเฉพาะสินค้าที่มีสต็อกอยู่ในระบบ (ไม่รวมรายการที่สต็อก = 0)
           </p>
         )}
-        <table className="print-table">
-          <thead>
-            <tr>
-              <th style={{ width: 30 }}>#</th>
-              <th style={{ width: 56 }}>รูป</th>
-              <th>ชื่อสินค้า</th>
-              <th>แบรนด์</th>
-              <th>หมวดหมู่</th>
-              <th>SKU</th>
-              <th style={{ width: 80 }}>ระบบ</th>
-              <th style={{ width: 80 }}>นับได้</th>
-              <th style={{ width: 120 }}>หมายเหตุ</th>
-            </tr>
-          </thead>
-          {(() => {
-            const baseItems = (view === 'new' ? auditItems : selectedAudit?.items ?? [])
-              .filter(item => printFilter === 'all' || item.system_qty > 0)
-            // Group by product_id to put each product in its own <tbody>
-            const groups: AuditItem[][] = []
-            for (const item of baseItems) {
-              const last = groups[groups.length - 1]
-              if (last && last[0].product_id === item.product_id) last.push(item)
-              else groups.push([item])
-            }
-            let rowNum = 0
-            return groups.map((group) => (
-              <tbody key={group[0].product_id} style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
-                {group.map((item, gi) => {
-                  rowNum++
-                  const isFirst = gi === 0
-                  const isLast = gi === group.length - 1
-                  return (
-                    <tr key={`${item.product_id}-${item.variant_id ?? gi}`} className={!isLast ? 'print-no-break' : ''}>
-                      <td style={{ textAlign: 'center' }}>{rowNum}</td>
-                      <td style={{ textAlign: 'center', padding: '4px' }}>
-                        {isFirst && item.product_image && (
-                          <img src={item.product_image} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee' }} crossOrigin="anonymous" />
-                        )}
-                      </td>
-                      <td>
-                        {isFirst && <span>{item.product_name}</span>}
-                        {item.variant_label && (
-                          <span style={{ display: 'inline-block', background: '#f3f4f6', borderRadius: 4, padding: '1px 6px', fontSize: 10, marginLeft: isFirst ? 6 : 0 }}>
-                            {item.variant_label}
-                          </span>
-                        )}
-                      </td>
-                      <td>{isFirst ? item.product_brand : ''}</td>
-                      <td>{isFirst ? item.product_category : ''}</td>
-                      <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{isFirst ? item.product_sku : ''}</td>
-                      <td style={{ textAlign: 'center' }}>{item.system_qty}</td>
-                      <td style={{ textAlign: 'center' }}>{view === 'detail' && item.actual_qty !== '—' ? item.actual_qty : ''}</td>
-                      <td>{view === 'detail' ? item.note : ''}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            ))
-          })()}
-        </table>
+        {/* Column widths shared across all mini-tables via colgroup */}
+        {(() => {
+          const COL = { num: 30, img: 56, name: 180, brand: 70, cat: 70, sku: 80, sys: 60, count: 60, note: 100 }
+          const colGroup = (
+            <colgroup>
+              <col style={{ width: COL.num }} />
+              <col style={{ width: COL.img }} />
+              <col style={{ width: COL.name }} />
+              <col style={{ width: COL.brand }} />
+              <col style={{ width: COL.cat }} />
+              <col style={{ width: COL.sku }} />
+              <col style={{ width: COL.sys }} />
+              <col style={{ width: COL.count }} />
+              <col style={{ width: COL.note }} />
+            </colgroup>
+          )
+          const tdStyle = (extra?: React.CSSProperties): React.CSSProperties => ({
+            border: '1px solid #ccc', padding: '5px 7px', fontSize: 12, ...extra,
+          })
+          const baseItems = (view === 'new' ? auditItems : selectedAudit?.items ?? [])
+            .filter(item => printFilter === 'all' || item.system_qty > 0)
+          const groups: AuditItem[][] = []
+          for (const item of baseItems) {
+            const last = groups[groups.length - 1]
+            if (last && last[0].product_id === item.product_id) last.push(item)
+            else groups.push([item])
+          }
+          let rowNum = 0
+          return (
+            <div>
+              {/* Header */}
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                {colGroup}
+                <thead>
+                  <tr style={{ background: '#f3f4f6' }}>
+                    {['#', 'รูป', 'ชื่อสินค้า', 'แบรนด์', 'หมวดหมู่', 'SKU', 'ระบบ', 'นับได้', 'หมายเหตุ'].map(h => (
+                      <th key={h} style={{ ...tdStyle(), fontWeight: 600, textAlign: h === '#' || h === 'ระบบ' || h === 'นับได้' || h === 'รูป' ? 'center' : 'left' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+              </table>
+              {/* One block per product — break-inside:avoid works reliably on div */}
+              {groups.map((group) => {
+                return (
+                  <div key={group[0].product_id} className="print-product-block">
+                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                      {colGroup}
+                      <tbody>
+                        {group.map((item, gi) => {
+                          rowNum++
+                          const isFirst = gi === 0
+                          return (
+                            <tr key={`${item.product_id}-${item.variant_id ?? gi}`}>
+                              <td style={tdStyle({ textAlign: 'center' })}>{rowNum}</td>
+                              <td style={tdStyle({ textAlign: 'center', padding: '3px' })}>
+                                {isFirst && item.product_image && (
+                                  <img src={item.product_image} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee' }} crossOrigin="anonymous" />
+                                )}
+                              </td>
+                              <td style={tdStyle()}>
+                                {isFirst && <span>{item.product_name}</span>}
+                                {item.variant_label && (
+                                  <span style={{ display: 'inline-block', background: '#f3f4f6', borderRadius: 4, padding: '1px 6px', fontSize: 10, marginLeft: isFirst ? 6 : 0 }}>
+                                    {item.variant_label}
+                                  </span>
+                                )}
+                              </td>
+                              <td style={tdStyle()}>{isFirst ? item.product_brand : ''}</td>
+                              <td style={tdStyle()}>{isFirst ? item.product_category : ''}</td>
+                              <td style={tdStyle({ fontFamily: 'monospace', fontSize: 11 })}>{isFirst ? item.product_sku : ''}</td>
+                              <td style={tdStyle({ textAlign: 'center' })}>{item.system_qty}</td>
+                              <td style={tdStyle({ textAlign: 'center' })}>{view === 'detail' && item.actual_qty !== '—' ? item.actual_qty : ''}</td>
+                              <td style={tdStyle()}>{view === 'detail' ? item.note : ''}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
         <p style={{ marginTop: 24, fontSize: 11, color: '#999' }}>
           ลายเซ็นผู้นับ: _________________________  วันที่: _______________
         </p>
