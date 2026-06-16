@@ -16,6 +16,7 @@ interface AuditItem {
   product_id: string
   variant_id?: string | null
   variant_label?: string | null
+  product_image?: string | null
   product_name: string
   product_sku: string
   product_brand: string
@@ -116,7 +117,7 @@ export function StockAuditPage() {
 
   const loadProducts = async () => {
     const [{ data: prods }, { data: cats }, { data: variantStocks }] = await Promise.all([
-      supabase.from('product_stock').select('id, name, sku, current_stock, category_id').order('name'),
+      supabase.from('product_stock').select('id, name, sku, current_stock, category_id, image_url').order('name'),
       supabase.from('categories').select('id, name, brand'),
       supabase.from('variant_stock').select('id, product_id, color, size, current_stock'),
     ])
@@ -136,6 +137,7 @@ export function StockAuditPage() {
         product_sku: p.sku,
         product_brand: cat?.brand ?? '—',
         product_category: cat?.name ?? '—',
+        product_image: (p as any).image_url ?? null,
         actual_qty: '',
         note: '',
       }
@@ -261,6 +263,7 @@ export function StockAuditPage() {
         <thead>
           <tr style="background:#4B5DB8;color:#fff">
             <th style="padding:6px 8px;border:1px solid #3a4a9a;width:30px">#</th>
+            <th style="padding:6px 8px;border:1px solid #3a4a9a;width:60px">รูป</th>
             <th style="padding:6px 8px;border:1px solid #3a4a9a;text-align:left">ชื่อสินค้า</th>
             <th style="padding:6px 8px;border:1px solid #3a4a9a;text-align:left">แบรนด์</th>
             <th style="padding:6px 8px;border:1px solid #3a4a9a;text-align:left">หมวดหมู่</th>
@@ -277,9 +280,13 @@ export function StockAuditPage() {
             const nameCell = isFirst
               ? `${item.product_name}${item.variant_label ? ` <span style="background:#f3f4f6;border-radius:4px;padding:1px 5px;font-size:10px">${item.variant_label}</span>` : ''}`
               : item.variant_label ? `<span style="background:#f3f4f6;border-radius:4px;padding:1px 5px;font-size:10px">${item.variant_label}</span>` : ''
+            const imgTag = isFirst && item.product_image
+              ? `<img src="${item.product_image}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #eee" crossorigin="anonymous" />`
+              : ''
             return `
             <tr style="background:${i % 2 === 0 ? '#fff' : '#f8f9ff'}">
               <td style="padding:5px 8px;border:1px solid #ddd;text-align:center">${i + 1}</td>
+              <td style="padding:4px;border:1px solid #ddd;text-align:center">${imgTag}</td>
               <td style="padding:5px 8px;border:1px solid #ddd">${nameCell}</td>
               <td style="padding:5px 8px;border:1px solid #ddd">${isFirst ? item.product_brand : ''}</td>
               <td style="padding:5px 8px;border:1px solid #ddd">${isFirst ? item.product_category : ''}</td>
@@ -466,6 +473,7 @@ export function StockAuditPage() {
                 <thead>
                   <tr className="bg-rowa-bg/50 border-b border-gray-100">
                     <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3 w-8">#</th>
+                    <th className="text-left text-xs font-medium text-rowa-muted px-2 py-3 w-12">รูป</th>
                     <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">สินค้า</th>
                     <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">แบรนด์ / หมวดหมู่</th>
                     <th className="text-left text-xs font-medium text-rowa-muted px-4 py-3">SKU</th>
@@ -481,6 +489,13 @@ export function StockAuditPage() {
                     return (
                       <tr key={`${item.product_id}-${item.variant_id ?? 'nv'}`} className="border-b border-gray-50">
                         <td className="px-4 py-2 text-xs text-gray-400">{i + 1}</td>
+                        <td className="px-2 py-2">
+                          {isFirstOfProduct && (
+                            item.product_image
+                              ? <img src={item.product_image} className="w-10 h-10 rounded-lg object-cover border border-gray-100" />
+                              : <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-300 text-xs">—</div>
+                          )}
+                        </td>
                         <td className="px-4 py-2">
                           {isFirstOfProduct && <p className="text-sm font-medium">{item.product_name}</p>}
                           {item.variant_label && (
@@ -631,6 +646,7 @@ export function StockAuditPage() {
           <thead>
             <tr>
               <th style={{ width: 30 }}>#</th>
+              <th style={{ width: 56 }}>รูป</th>
               <th>ชื่อสินค้า</th>
               <th>แบรนด์</th>
               <th>หมวดหมู่</th>
@@ -650,6 +666,11 @@ export function StockAuditPage() {
                 return (
                   <tr key={`${item.product_id}-${item.variant_id ?? i}`}>
                     <td style={{ textAlign: 'center' }}>{i + 1}</td>
+                    <td style={{ textAlign: 'center', padding: '4px' }}>
+                      {isFirst && item.product_image && (
+                        <img src={item.product_image} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee' }} crossOrigin="anonymous" />
+                      )}
+                    </td>
                     <td>
                       {isFirst && <span>{item.product_name}</span>}
                       {item.variant_label && (
