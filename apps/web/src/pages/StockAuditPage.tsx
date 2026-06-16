@@ -232,7 +232,35 @@ export function StockAuditPage() {
   const printAudit = (filter: 'all' | 'in-stock') => {
     setPrintFilter(filter)
     setShowPrintMenu(false)
-    setTimeout(() => window.print(), 50)
+    // Wait for React to render print template, then inject page breaks
+    setTimeout(() => {
+      const root = document.getElementById('print-root')
+      if (root) {
+        // Remove old page breaks
+        root.querySelectorAll('.print-page-break').forEach(el => el.remove())
+        // Remove old forced-break classes
+        root.querySelectorAll('.force-new-page').forEach(el => el.classList.remove('force-new-page'))
+
+        const PAGE_H = 1050 // ~A4 at 96dpi (297mm), leave margin
+        const blocks = Array.from(root.querySelectorAll<HTMLElement>('.print-product-block'))
+        let usedHeight = root.querySelector<HTMLElement>('.print-header')?.offsetHeight ?? 80
+        usedHeight += 60 // header row of table
+
+        for (const block of blocks) {
+          const h = block.offsetHeight
+          if (usedHeight + h > PAGE_H) {
+            // Insert page break before this block
+            const br = document.createElement('div')
+            br.className = 'print-page-break'
+            br.style.cssText = 'page-break-before: always; break-before: page; height: 0; margin: 0;'
+            block.parentNode!.insertBefore(br, block)
+            usedHeight = 60 // reset to just header height
+          }
+          usedHeight += h
+        }
+      }
+      window.print()
+    }, 100)
   }
 
   const getExportItems = (filter: 'all' | 'in-stock'): AuditItem[] => {
@@ -630,7 +658,7 @@ export function StockAuditPage() {
 
       {/* PRINT TEMPLATE */}
       <div id="print-root" style={{ display: 'none' }} className="p-6">
-        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+        <div className="print-header" style={{ textAlign: 'center', marginBottom: 16 }}>
           <h1 style={{ fontSize: 20, fontWeight: 'bold' }}>ROWA — ใบตรวจนับสต็อก</h1>
           <p style={{ fontSize: 12, color: '#666' }}>
             วันที่พิมพ์: {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
