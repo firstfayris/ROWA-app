@@ -232,34 +232,44 @@ export function StockAuditPage() {
   const printAudit = (filter: 'all' | 'in-stock') => {
     setPrintFilter(filter)
     setShowPrintMenu(false)
-    // Wait for React to render print template, then inject page breaks
     setTimeout(() => {
       const root = document.getElementById('print-root')
-      if (root) {
-        // Remove old page breaks
-        root.querySelectorAll('.print-page-break').forEach(el => el.remove())
-        // Remove old forced-break classes
-        root.querySelectorAll('.force-new-page').forEach(el => el.classList.remove('force-new-page'))
+      if (!root) { window.print(); return }
 
-        const PAGE_H = 1050 // ~A4 at 96dpi (297mm), leave margin
+      // Make root visible off-screen so offsetHeight is measurable
+      root.style.cssText = 'display:block;position:fixed;left:-9999px;top:0;width:900px;visibility:hidden'
+
+      // Remove old injected page breaks
+      root.querySelectorAll('.print-page-break').forEach(el => el.remove())
+
+      setTimeout(() => {
+        const PAGE_H = 980 // conservative A4 printable height in px at screen dpi
         const blocks = Array.from(root.querySelectorAll<HTMLElement>('.print-product-block'))
-        let usedHeight = root.querySelector<HTMLElement>('.print-header')?.offsetHeight ?? 80
-        usedHeight += 60 // header row of table
+        const headerH = (root.querySelector<HTMLElement>('.print-header')?.offsetHeight ?? 60) + 40
+        let usedH = headerH
 
         for (const block of blocks) {
           const h = block.offsetHeight
-          if (usedHeight + h > PAGE_H) {
-            // Insert page break before this block
+          if (usedH + h > PAGE_H) {
             const br = document.createElement('div')
             br.className = 'print-page-break'
-            br.style.cssText = 'page-break-before: always; break-before: page; height: 0; margin: 0;'
+            br.style.cssText = 'page-break-before:always;break-before:page;'
             block.parentNode!.insertBefore(br, block)
-            usedHeight = 60 // reset to just header height
+            usedH = h
+          } else {
+            usedH += h
           }
-          usedHeight += h
         }
-      }
-      window.print()
+
+        // Restore normal print visibility
+        root.style.cssText = ''
+        window.print()
+
+        // Clean up injected breaks after printing
+        setTimeout(() => {
+          root.querySelectorAll('.print-page-break').forEach(el => el.remove())
+        }, 1000)
+      }, 50)
     }, 100)
   }
 
