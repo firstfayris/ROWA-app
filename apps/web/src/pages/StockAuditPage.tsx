@@ -386,6 +386,7 @@ export function StockAuditPage() {
           .print-table { width: 100%; border-collapse: collapse; font-size: 12px; }
           .print-table th, .print-table td { border: 1px solid #ccc; padding: 6px 8px; }
           .print-table th { background: #f3f4f6; font-weight: 600; }
+          .print-table tbody { break-inside: avoid; page-break-inside: avoid; }
         }
       `}</style>
 
@@ -656,40 +657,50 @@ export function StockAuditPage() {
               <th style={{ width: 120 }}>หมายเหตุ</th>
             </tr>
           </thead>
-          <tbody>
-            {(() => {
-              const baseItems = (view === 'new' ? auditItems : selectedAudit?.items ?? [])
-                .filter(item => printFilter === 'all' || item.system_qty > 0)
-              return baseItems.map((item, i) => {
-                const prevItem = baseItems[i - 1]
-                const isFirst = !prevItem || prevItem.product_id !== item.product_id
-                return (
-                  <tr key={`${item.product_id}-${item.variant_id ?? i}`}>
-                    <td style={{ textAlign: 'center' }}>{i + 1}</td>
-                    <td style={{ textAlign: 'center', padding: '4px' }}>
-                      {isFirst && item.product_image && (
-                        <img src={item.product_image} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee' }} crossOrigin="anonymous" />
-                      )}
-                    </td>
-                    <td>
-                      {isFirst && <span>{item.product_name}</span>}
-                      {item.variant_label && (
-                        <span style={{ display: 'inline-block', background: '#f3f4f6', borderRadius: 4, padding: '1px 6px', fontSize: 10, marginLeft: isFirst ? 6 : 0 }}>
-                          {item.variant_label}
-                        </span>
-                      )}
-                    </td>
-                    <td>{isFirst ? item.product_brand : ''}</td>
-                    <td>{isFirst ? item.product_category : ''}</td>
-                    <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{isFirst ? item.product_sku : ''}</td>
-                    <td style={{ textAlign: 'center' }}>{item.system_qty}</td>
-                    <td style={{ textAlign: 'center' }}>{view === 'detail' && item.actual_qty !== '—' ? item.actual_qty : ''}</td>
-                    <td>{view === 'detail' ? item.note : ''}</td>
-                  </tr>
-                )
-              })
-            })()}
-          </tbody>
+          {(() => {
+            const baseItems = (view === 'new' ? auditItems : selectedAudit?.items ?? [])
+              .filter(item => printFilter === 'all' || item.system_qty > 0)
+            // Group by product_id to put each product in its own <tbody>
+            const groups: AuditItem[][] = []
+            for (const item of baseItems) {
+              const last = groups[groups.length - 1]
+              if (last && last[0].product_id === item.product_id) last.push(item)
+              else groups.push([item])
+            }
+            let rowNum = 0
+            return groups.map((group) => (
+              <tbody key={group[0].product_id} style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                {group.map((item, gi) => {
+                  rowNum++
+                  const isFirst = gi === 0
+                  return (
+                    <tr key={`${item.product_id}-${item.variant_id ?? gi}`}>
+                      <td style={{ textAlign: 'center' }}>{rowNum}</td>
+                      <td style={{ textAlign: 'center', padding: '4px' }}>
+                        {isFirst && item.product_image && (
+                          <img src={item.product_image} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #eee' }} crossOrigin="anonymous" />
+                        )}
+                      </td>
+                      <td>
+                        {isFirst && <span>{item.product_name}</span>}
+                        {item.variant_label && (
+                          <span style={{ display: 'inline-block', background: '#f3f4f6', borderRadius: 4, padding: '1px 6px', fontSize: 10, marginLeft: isFirst ? 6 : 0 }}>
+                            {item.variant_label}
+                          </span>
+                        )}
+                      </td>
+                      <td>{isFirst ? item.product_brand : ''}</td>
+                      <td>{isFirst ? item.product_category : ''}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{isFirst ? item.product_sku : ''}</td>
+                      <td style={{ textAlign: 'center' }}>{item.system_qty}</td>
+                      <td style={{ textAlign: 'center' }}>{view === 'detail' && item.actual_qty !== '—' ? item.actual_qty : ''}</td>
+                      <td>{view === 'detail' ? item.note : ''}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            ))
+          })()}
         </table>
         <p style={{ marginTop: 24, fontSize: 11, color: '#999' }}>
           ลายเซ็นผู้นับ: _________________________  วันที่: _______________
