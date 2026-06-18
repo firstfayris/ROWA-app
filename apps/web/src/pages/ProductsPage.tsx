@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Package, Pencil, Trash2, ArrowUp, ArrowDown, Upload, X, Tag, History, Layers } from 'lucide-react'
+import { Plus, Search, Package, Pencil, Trash2, ArrowUp, ArrowDown, Upload, X, Tag, History, Layers, Wand2, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
@@ -90,6 +90,80 @@ interface StockMovement {
   created_at: string
   variant_color: string | null
   variant_size: string | null
+}
+
+function AutoVariantGenerator({ onGenerate }: { onGenerate: (variants: { color: string; size: string; image_url: null }[]) => void }) {
+  const [colors, setColors] = useState<string[]>([])
+  const [sizes, setSizes] = useState<string[]>([])
+  const [colorInput, setColorInput] = useState('')
+  const [sizeInput, setSizeInput] = useState('')
+  const [open, setOpen] = useState(false)
+
+  const addTag = (type: 'color' | 'size', value: string) => {
+    const v = value.replace(',', '').trim()
+    if (!v) return
+    if (type === 'color') { if (!colors.includes(v)) setColors(c => [...c, v]); setColorInput('') }
+    else { if (!sizes.includes(v)) setSizes(c => [...c, v]); setSizeInput('') }
+  }
+
+  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>, type: 'color' | 'size') => {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(type, e.currentTarget.value) }
+  }
+
+  const generate = () => {
+    const variants = colors.flatMap(c => sizes.map(s => ({ color: c, size: s, image_url: null as null })))
+    onGenerate(variants)
+    setColors([]); setSizes([]); setOpen(false)
+  }
+
+  const count = colors.length * sizes.length
+
+  return (
+    <div className="border border-dashed border-rowa-blue/40 rounded-xl p-3 bg-rowa-blue/5 space-y-2">
+      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2 text-sm font-medium text-rowa-blue w-full text-left">
+        <Wand2 className="h-4 w-4" />
+        สร้างตัวเลือกอัตโนมัติ (สี × ไซส์)
+        {open ? <ChevronUp className="h-4 w-4 ml-auto" /> : <ChevronDown className="h-4 w-4 ml-auto" />}
+      </button>
+      {open && (
+        <div className="space-y-2 pt-1">
+          <div>
+            <p className="text-xs text-gray-500 mb-1">สี (กด Enter หรือ , เพื่อเพิ่ม)</p>
+            <div className="flex flex-wrap gap-1.5 items-center border border-gray-200 rounded-lg px-2 py-1.5 bg-white min-h-[36px]">
+              {colors.map(c => (
+                <span key={c} className="flex items-center gap-1 bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full">
+                  {c}<button onClick={() => setColors(a => a.filter(x => x !== c))} className="text-blue-400 hover:text-blue-700 text-sm leading-none">×</button>
+                </span>
+              ))}
+              <input className="text-sm outline-none bg-transparent flex-1 min-w-[60px]" placeholder="เช่น ขาว, ดำ..."
+                value={colorInput} onChange={e => setColorInput(e.target.value)} onKeyDown={e => handleKey(e, 'color')}
+                onBlur={() => { if (colorInput.trim()) addTag('color', colorInput) }} />
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-1">ไซส์ (กด Enter หรือ , เพื่อเพิ่ม)</p>
+            <div className="flex flex-wrap gap-1.5 items-center border border-gray-200 rounded-lg px-2 py-1.5 bg-white min-h-[36px]">
+              {sizes.map(s => (
+                <span key={s} className="flex items-center gap-1 bg-pink-50 text-pink-700 text-xs px-2 py-0.5 rounded-full">
+                  {s}<button onClick={() => setSizes(a => a.filter(x => x !== s))} className="text-pink-400 hover:text-pink-700 text-sm leading-none">×</button>
+                </span>
+              ))}
+              <input className="text-sm outline-none bg-transparent flex-1 min-w-[60px]" placeholder="เช่น S, M, L, XL..."
+                value={sizeInput} onChange={e => setSizeInput(e.target.value)} onKeyDown={e => handleKey(e, 'size')}
+                onBlur={() => { if (sizeInput.trim()) addTag('size', sizeInput) }} />
+            </div>
+          </div>
+          <button
+            disabled={count === 0}
+            onClick={generate}
+            className="w-full py-2 rounded-lg text-sm font-medium bg-rowa-blue text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-rowa-blue/90 transition-colors"
+          >
+            {count > 0 ? `สร้าง ${count} ตัวเลือก (${colors.length} สี × ${sizes.length} ไซส์)` : 'กรอกสีและไซส์ก่อน'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 const defaultPlatform = (): PlatformPrice => ({ selling_price: '', discount_percent: '0' })
@@ -633,19 +707,31 @@ export function ProductsPage() {
                 </label>
               </div>
               {form.hasVariants && (
-                <div className="space-y-2">
-                  {form.variants.map((v, i) => (
-                    <div key={i} className="flex gap-2 items-center">
-                      <input className="input flex-1" placeholder="สี เช่น แดง / ฟ้า" value={v.color}
-                        onChange={e => setForm(f => ({ ...f, variants: f.variants.map((x, j) => j === i ? { ...x, color: e.target.value } : x) }))} />
-                      <input className="input flex-1" placeholder="ไซส์ เช่น S / M / L / XL" value={v.size}
-                        onChange={e => setForm(f => ({ ...f, variants: f.variants.map((x, j) => j === i ? { ...x, size: e.target.value } : x) }))} />
-                      <button onClick={async () => {
-                        if (v.id) await supabase.from('product_variants').delete().eq('id', v.id)
-                        setForm(f => ({ ...f, variants: f.variants.filter((_, j) => j !== i) }))
-                      }} className="p-1.5 hover:bg-red-50 rounded"><Trash2 className="h-4 w-4 text-red-400" /></button>
+                <div className="space-y-3">
+                  {/* Auto-generate */}
+                  <AutoVariantGenerator onGenerate={newVariants => setForm(f => {
+                    const existing = f.variants.filter(v => v.id)
+                    const dupes = new Set(existing.map(v => `${v.color}|${v.size}`))
+                    const toAdd = newVariants.filter(v => !dupes.has(`${v.color}|${v.size}`))
+                    return { ...f, variants: [...existing, ...toAdd] }
+                  })} />
+
+                  {form.variants.length > 0 && (
+                    <div className="space-y-2">
+                      {form.variants.map((v, i) => (
+                        <div key={i} className="flex gap-2 items-center">
+                          <input className="input flex-1" placeholder="สี เช่น แดง / ฟ้า" value={v.color}
+                            onChange={e => setForm(f => ({ ...f, variants: f.variants.map((x, j) => j === i ? { ...x, color: e.target.value } : x) }))} />
+                          <input className="input flex-1" placeholder="ไซส์ เช่น S / M / L / XL" value={v.size}
+                            onChange={e => setForm(f => ({ ...f, variants: f.variants.map((x, j) => j === i ? { ...x, size: e.target.value } : x) }))} />
+                          <button onClick={async () => {
+                            if (v.id) await supabase.from('product_variants').delete().eq('id', v.id)
+                            setForm(f => ({ ...f, variants: f.variants.filter((_, j) => j !== i) }))
+                          }} className="p-1.5 hover:bg-red-50 rounded"><Trash2 className="h-4 w-4 text-red-400" /></button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                   <Button size="sm" variant="secondary" onClick={() => setForm(f => ({ ...f, variants: [...f.variants, { color: '', size: '', image_url: null }] }))}>
                     <Plus className="h-4 w-4" /> เพิ่มตัวเลือก
                   </Button>
