@@ -279,21 +279,25 @@ export function OrdersPage() {
     )
     if (itemsError) { toast.error(itemsError.message); setSaving(false); return }
 
+    const orderRef = `[order:${order.id}]`
     const stockResults = await Promise.all(validItems.map(i =>
       supabase.from('stock_movements').insert({
         product_id: i.product_id,
         variant_id: i.variant_id || null,
         type: 'out',
         quantity: i.quantity,
-        note: `ขาย${platformLabel[salePlatform]}${saleOrderId ? ' #' + saleOrderId : ''}`,
+        note: `ขาย${platformLabel[salePlatform]}${saleOrderId ? ' #' + saleOrderId : ''} ${orderRef}`,
         created_by: profile!.id,
         movement_date: paymentDate,
-        source_order_id: order.id,
       })
     ))
     const stockError = stockResults.find(r => r.error)?.error
-    if (stockError) toast.error(`ตัดสต็อกไม่สำเร็จ: ${stockError.message}`)
-    else toast.success('บันทึกการขายและตัดสต็อกแล้ว')
+    if (stockError) {
+      toast.error(`ตัดสต็อกไม่สำเร็จ: ${stockError.message}`)
+      console.error('stock_movements insert error:', stockError)
+    } else {
+      toast.success('บันทึกการขายและตัดสต็อกแล้ว')
+    }
 
     await fetchOrders()   // โหลดข้อมูลก่อน แล้วค่อยปิด modal
     setShowSaleModal(false)
@@ -362,8 +366,8 @@ export function OrdersPage() {
                       onClick={async e => {
                         e.stopPropagation()
                         if (!confirm('ต้องการลบคำสั่งซื้อนี้? สต็อกจะถูกคืนกลับอัตโนมัติ')) return
-                        // ลบ stock_movements ที่ผูกกับออเดอร์นี้โดยตรง
-                        await supabase.from('stock_movements').delete().eq('source_order_id', order.id)
+                        // ลบ stock_movements ที่ผูกกับออเดอร์นี้ (อ้างอิงจาก note)
+                        await supabase.from('stock_movements').delete().like('note', `%[order:${order.id}]%`)
                         await supabase.from('order_items').delete().eq('order_id', order.id)
                         await supabase.from('orders').delete().eq('id', order.id)
                         toast.success('ลบคำสั่งซื้อและคืนสต็อกแล้ว'); fetchOrders()
