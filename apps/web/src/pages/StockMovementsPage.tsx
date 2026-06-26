@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { ArrowUp, ArrowDown, Package, Search, Trash2 } from 'lucide-react'
+import { ArrowUp, ArrowDown, Package, Search, Trash2, X } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import toast from 'react-hot-toast'
 
@@ -57,6 +57,7 @@ export function StockMovementsPage() {
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [selectedMovement, setSelectedMovement] = useState<Movement | null>(null)
 
   const fetchMovements = async () => {
     setLoading(true)
@@ -135,6 +136,13 @@ export function StockMovementsPage() {
   const totalIn = filtered.filter(m => m.type === 'in').reduce((s, m) => s + m.quantity, 0)
   const totalOut = filtered.filter(m => m.type === 'out').reduce((s, m) => s + m.quantity, 0)
   const netStock = totalIn - totalOut
+
+  const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
+    <div className="flex gap-3">
+      <span className="text-xs text-rowa-muted w-28 flex-shrink-0 pt-0.5">{label}</span>
+      <span className="text-sm text-rowa-text flex-1">{value}</span>
+    </div>
+  )
 
   const formatDate = (dateStr: string | null, fallback: string) => {
     const s = dateStr ?? fallback.slice(0, 10)
@@ -233,6 +241,66 @@ export function StockMovementsPage() {
         )}
       </div>
 
+      {/* Detail drawer */}
+      {selectedMovement && (() => {
+        const m = selectedMovement
+        const variantLabel = [m.variant_color, m.variant_size].filter(Boolean).join(' / ')
+        const noteClean = (m.note ?? '').replace(/\[order:[^\]]+\]/, '').trim()
+        const orderMatch = (m.note ?? '').match(/\[order:([^\]]+)\]/)
+        return (
+          <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setSelectedMovement(null)}>
+            <div className="absolute inset-0 bg-black/30" />
+            <div className="relative z-10 w-full max-w-sm bg-white h-full shadow-2xl flex flex-col overflow-y-auto"
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <h2 className="text-base font-bold text-rowa-text">รายละเอียดการเคลื่อนไหว</h2>
+                <button onClick={() => setSelectedMovement(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-5 space-y-5 flex-1">
+                {/* Type badge */}
+                <div>
+                  <span className={`inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1 rounded-full
+                    ${m.type === 'in' ? 'bg-green-100 text-green-700' : m.type === 'out' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                    {typeIcon[m.type]} {typeLabel[m.type]}
+                    <span className="font-bold ml-1">
+                      {m.type === 'in' ? '+' : m.type === 'out' ? '-' : ''}{m.quantity} ชิ้น
+                    </span>
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <Row label="สินค้า" value={<>
+                    <p className="text-sm font-medium text-rowa-text">{m.product_name}</p>
+                    <p className="text-xs text-rowa-muted font-mono">{m.product_sku}</p>
+                  </>} />
+                  {variantLabel && <Row label="ตัวเลือก" value={variantLabel} />}
+                  <Row label="วันที่" value={formatDate(m.movement_date, m.created_at)} />
+                  {noteClean && <Row label="หมายเหตุ" value={<span className="text-sm text-rowa-text break-all">{noteClean}</span>} />}
+                  {orderMatch && (
+                    <Row label="อ้างอิงออเดอร์" value={
+                      <span className="text-xs font-mono text-rowa-muted break-all">{orderMatch[1]}</span>
+                    } />
+                  )}
+                  <Row label="บันทึกโดย" value={m.created_by_name ?? '—'} />
+                </div>
+
+                {isAdmin && (
+                  <div className="pt-4 border-t border-gray-100">
+                    <button
+                      onClick={async () => { await deleteMovement(m.id); setSelectedMovement(null) }}
+                      className="flex items-center gap-2 text-sm text-red-500 hover:text-red-700 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors">
+                      <Trash2 className="h-4 w-4" /> ลบรายการนี้
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Table */}
       <div className="card p-0 overflow-x-auto">
         {loading ? (
@@ -259,7 +327,8 @@ export function StockMovementsPage() {
               {filtered.map(m => {
                 const variantLabel = [m.variant_color, m.variant_size].filter(Boolean).join(' / ')
                 return (
-                  <tr key={m.id} className="border-b border-gray-50 hover:bg-rowa-bg/30 transition-colors">
+                  <tr key={m.id} onClick={() => setSelectedMovement(m)}
+                    className="border-b border-gray-50 hover:bg-rowa-bg/30 transition-colors cursor-pointer">
                     <td className="px-6 py-3 text-sm text-rowa-muted whitespace-nowrap">
                       {formatDate(m.movement_date, m.created_at)}
                     </td>
@@ -284,7 +353,7 @@ export function StockMovementsPage() {
                     <td className="px-4 py-3 text-sm text-rowa-muted max-w-xs truncate">{m.note ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-rowa-muted">{m.created_by_name ?? '—'}</td>
                     {isAdmin && (
-                      <td className="px-6 py-3 text-right">
+                      <td className="px-6 py-3 text-right" onClick={e => e.stopPropagation()}>
                         <button onClick={() => deleteMovement(m.id)} disabled={deletingId === m.id}
                           className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
                           title="ลบรายการ">
